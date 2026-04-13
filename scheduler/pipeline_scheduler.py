@@ -1,0 +1,203 @@
+"""
+scheduler/pipeline_scheduler.py
+---------------------------------
+APScheduler 기반 완전 자동화 파이프라인.
+뉴스 수집(매 1시간), 영상 수집(매일 새벽 3시), LLM 분석(수집 직후)을
+사람 개입 없이 자동으로 실행하고 결과를 DB에 기록합니다.
+"""
+import logging
+import os
+from datetime import datetime
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
+from dotenv import load_dotenv
+from sqlalchemy import text
+
+load_dotenv()
+logger = logging.getLogger(__name__)
+
+NEWS_INTERVAL_HOURS = int(os.getenv("NEWS_FETCH_INTERVAL_HOURS", "1"))
+VIDEO_CRON_HOUR = int(os.getenv("VIDEO_FETCH_CRON_HOUR", "3"))
+
+
+# ---- 파이프라인 작업 함수들 ---------------------------------
+
+def job_fetch_news():
+    """뉴스 RSS 전체 수집 → LLM 분석 → DB 저장 파이프라인"""
+    from ingestion.news_scraper import run_all_sources
+    from engine.gemma_worker import analyze_article
+    from engine.graph_builder import add_analysis_to_graph
+    from db.vector_store import get_unprocessed_articles, save_analysis_result, get_pipeline_stats
+    from db.vector_store import _get_session
+
+    logger.info("📰 [뉴스 파이프라인] 시작")
+    start = datetime.now()
+
+    try:
+        # Step 1: 수집
+        result = run_all_sources()
+        logger.info(f"수집 완료: {result}")
+
+        # Step 2: 미처리 기사 LLM 분석
+        unprocessed = get_unprocessed_articles(limit=50)
+        logger.info(f"LLM 분석 대상: {len(unprocessed)}건")
+
+        for article in unprocessed:
+            analysis = analyze_article(
+                title=article["title"],
+                content=article["content"],
+                source=article["source"],
+            )
+            if analysis:
+                save_analysis_result(article["id"], analysis)
+                add_analysis_to_graph(
+                    article_id=article["id"],
+                    entities=[e.model_dump() for e in analysis.entities],
+                    relations=[r.model_dump() for r in analysis.relations],
+                )
+
+        elapsed = (datetime.now() - start).total_seconds()
+        _log_pipeline(source="news", status="success",
+                      fetched=result["fetched"], skipped=result["skipped"], saved=result["saved"])
+        logger.info(f"✅ [뉴스 파이프라인] 완료 ({elapsed:.1f}초)")
+
+    except Exception as e:
+        _log_pipeline(source="news", status="failure", error_msg=str(e))
+        logger.error(f"❌ [뉴스 파이프라인] 오류: {e}")
+        raise
+
+
+def job_fetch_videos():
+    """유튜브 채널 자막 수집 → LLM 분석 → DB 저장 파이프라인"""
+    from ingestion.video_processor import run_all_channels
+    from engine.gemma_worker import analyze_article
+    from engine.graph_builder import add_analysis_to_graph
+    from db.vector_store import get_unprocessed_articles, save_analysis_result
+
+    logger.info("🎬 [영상 파이프라인] 시작")
+    start = datetime.now()
+
+    try:
+        result = run_all_channels()
+        logger.info(f"수집 완료: {result}")
+
+        unprocessed = get_unprocessed_articles(limit=30)
+        for article in unprocessed:
+            analysis = analyze_article(
+                title=article["title"],
+                content=article["content"],
+                source=article["source"],
+            )
+            if analysis:
+                save_analysis_result(article["id"], analysis)
+                add_analysis_to_graph(
+                    article_id=article["id"],
+                    entities=[e.model_dump() for e in analysis.entities],
+                    relations=[r.model_dump() for r in analysis.relations],
+                )
+
+        elapsed = (datetime.now() - start).total_seconds()
+        _log_pipeline(source="youtube", status="success",
+                      fetched=result["fetched"], skipped=result["skipped"], saved=result["saved"])
+        logger.info(f"✅ [영상 파이프라인] 완료 ({elapsed:.1f}초)")
+
+    except Exception as e:
+        _log_pipeline(source="youtube", status="failure", error_msg=str(e))
+        logger.error(f"❌ [영상 파이프라인] 오류: {e}")
+        raise
+
+
+def _log_pipeline(source: str, status: str,
+                  fetched: int = 0, skipped: int = 0, saved: int = 0,
+                  error_msg: str = None):
+    """파이프라인 실행 결과를 pipeline_logs 테이블에 기록합니다."""
+    try:
+        from db.vector_store import _get_session
+        import uuid
+        session = _get_session()
+        session.execute(text("""
+            INSERT INTO pipeline_logs (id, source, status, fetched, skipped, saved, error_msg)
+            VALUES (:id, :source, :status, :fetched, :skipped, :saved, :error_msg)
+        """), {
+            "id": str(uuid.uuid4()),
+            "source": source, "status": status,
+            "fetched": fetched, "skipped": skipped, "saved": saved,
+            "error_msg": error_msg,
+        })
+        session.commit()
+        session.close()
+    except Exception as e:
+        logger.warning(f"로그 저장 실패: {e}")
+
+
+# ---- 스케줄러 인스턴스 ------------------------------------
+_scheduler: BackgroundScheduler | None = None
+
+
+def _on_job_event(event):
+    if event.exception:
+        logger.error(f"[스케줄러] 작업 실패: {event.job_id} - {event.exception}")
+    else:
+        logger.info(f"[스케줄러] 작업 완료: {event.job_id}")
+
+
+def start_scheduler() -> BackgroundScheduler:
+    """스케줄러를 시작하고 인스턴스를 반환합니다."""
+    global _scheduler
+    if _scheduler and _scheduler.running:
+        logger.info("스케줄러가 이미 실행 중입니다.")
+        return _scheduler
+
+    _scheduler = BackgroundScheduler(timezone="Asia/Seoul")
+    _scheduler.add_listener(_on_job_event, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
+
+    # 뉴스 RSS: 매 N시간마다
+    _scheduler.add_job(
+        job_fetch_news,
+        trigger="interval",
+        hours=NEWS_INTERVAL_HOURS,
+        id="news_pipeline",
+        name="뉴스 RSS 수집 파이프라인",
+        max_instances=1,
+        misfire_grace_time=600,  # 10분 내에 시작 못하면 스킵
+    )
+
+    # 유튜브 자막: 매일 새벽 VIDEO_CRON_HOUR시
+    _scheduler.add_job(
+        job_fetch_videos,
+        trigger="cron",
+        hour=VIDEO_CRON_HOUR,
+        minute=0,
+        id="video_pipeline",
+        name="유튜브 자막 수집 파이프라인",
+        max_instances=1,
+        misfire_grace_time=1800,  # 30분 내에 시작 못하면 스킵
+    )
+
+    _scheduler.start()
+    logger.info(f"✅ 스케줄러 시작 | 뉴스: 매 {NEWS_INTERVAL_HOURS}시간 | "
+                f"영상: 매일 {VIDEO_CRON_HOUR:02d}:00")
+    return _scheduler
+
+
+def stop_scheduler():
+    """스케줄러를 안전하게 중지합니다."""
+    global _scheduler
+    if _scheduler and _scheduler.running:
+        _scheduler.shutdown(wait=False)
+        logger.info("스케줄러 중지 완료")
+
+
+def get_scheduler_status() -> list[dict]:
+    """현재 스케줄된 작업 목록과 다음 실행 시각을 반환합니다."""
+    if not _scheduler:
+        return []
+    jobs = []
+    for job in _scheduler.get_jobs():
+        jobs.append({
+            "id": job.id,
+            "name": job.name,
+            "next_run": str(job.next_run_time),
+        })
+    return jobs
