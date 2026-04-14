@@ -13,7 +13,15 @@ import plotly.graph_objects as go
 import networkx as nx
 import threading
 import time
-from streamlit.runtime.scriptrunner import add_script_run_context, get_script_run_ctx
+# 백그라운드 스레드에서 세션 상태 접근을 위한 유포트 (버전별 예외 처리)
+try:
+    from streamlit.runtime.scriptrunner.script_run_context import add_script_run_context, get_script_run_ctx
+except ImportError:
+    try:
+        from streamlit.runtime.scriptrunner import add_script_run_context, get_script_run_ctx
+    except ImportError:
+        # 매우 오래된 버전 대응
+        from streamlit.scriptrunner import add_script_run_context, get_script_run_ctx
 
 try:
     from db.vector_store import (
