@@ -44,12 +44,15 @@ def _get_engine():
                     CREATE TABLE IF NOT EXISTS youtube_sources (
                         id SERIAL PRIMARY KEY,
                         name TEXT UNIQUE NOT NULL,
-                        channel_url TEXT NOT NULL,
+                        channel_url TEXT UNIQUE NOT NULL,
                         label TEXT NOT NULL,
                         is_active BOOLEAN DEFAULT TRUE,
                         created_at TIMESTAMPTZ DEFAULT NOW()
                     );
                 """))
+                # 기존 테이블 대응: channel_url에 유니크 인덱스 추가
+                conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_youtube_sources_url ON youtube_sources(channel_url);"))
+                
                 conn.execute(text("""
                     CREATE TABLE IF NOT EXISTS recommended_sources (
                         id SERIAL PRIMARY KEY,
@@ -431,12 +434,14 @@ def init_news_sources():
             CREATE TABLE IF NOT EXISTS news_sources (
                 id SERIAL PRIMARY KEY,
                 name TEXT UNIQUE NOT NULL,
-                url TEXT NOT NULL,
+                url TEXT UNIQUE NOT NULL,
                 label TEXT NOT NULL,
                 is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMPTZ DEFAULT NOW()
             )
         """))
+        # 기존 테이블 대응: url에 유니크 인덱스 추가
+        session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_news_sources_url ON news_sources(url);"))
         
         # 데이터가 하나도 없을 경우에만 초기 데이터 삽입
         count = session.execute(text("SELECT count(*) FROM news_sources")).scalar()
@@ -480,6 +485,7 @@ def add_news_source(name: str, url: str, label: str):
         session.execute(text("""
             INSERT INTO news_sources (name, url, label)
             VALUES (:name, :url, :label)
+            ON CONFLICT (url) DO UPDATE SET name = EXCLUDED.name, label = EXCLUDED.label
             ON CONFLICT (name) DO UPDATE SET url = EXCLUDED.url, label = EXCLUDED.label
         """), {"name": name, "url": url, "label": label})
         session.commit()
@@ -547,7 +553,9 @@ def add_youtube_source(name: str, channel_url: str, label: str):
     try:
         session.execute(text("""
             INSERT INTO youtube_sources (name, channel_url, label) 
-            VALUES (:n, :u, :l) ON CONFLICT(name) DO NOTHING
+            VALUES (:n, :u, :l) 
+            ON CONFLICT(channel_url) DO UPDATE SET name = EXCLUDED.name, label = EXCLUDED.label
+            ON CONFLICT(name) DO UPDATE SET channel_url = EXCLUDED.channel_url, label = EXCLUDED.label
         """), {"n": name, "u": channel_url, "l": label})
         session.commit()
     finally:

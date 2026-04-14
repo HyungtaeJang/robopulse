@@ -303,9 +303,13 @@ with tab_settings:
                 new_name = "".join(filter(str.isalnum, new_label.lower())).replace(" ", "_")
                 if st.form_submit_button("소스 등록"):
                     if new_label and new_url:
-                        add_news_source(new_name, new_url, new_label)
-                        st.success(f"'{new_label}' 소스가 등록되었습니다.")
-                        st.rerun()
+                        # 중복 체크
+                        if any(s['url'] == new_url for s in sources):
+                            st.warning("⚠️ 이미 등록된 뉴스 소스 URL입니다.")
+                        else:
+                            add_news_source(new_name, new_url, new_label)
+                            st.success(f"'{new_label}' 소스가 등록되었습니다.")
+                            st.rerun()
                     else:
                         st.error("이름과 URL을 모두 입력해주세요.")
 
@@ -337,9 +341,13 @@ with tab_settings:
                 yt_name = "youtube_" + "".join(filter(str.isalnum, yt_label.lower())).replace(" ", "_")
                 if st.form_submit_button("채널 등록"):
                     if yt_label and yt_url:
-                        add_youtube_source(yt_name, yt_url, yt_label)
-                        st.success(f"'{yt_label}' 채널이 등록되었습니다.")
-                        st.rerun()
+                        # 중복 체크
+                        if any(s['channel_url'] == yt_url for s in yt_sources):
+                            st.warning("⚠️ 이미 등록된 유튜브 채널 URL입니다.")
+                        else:
+                            add_youtube_source(yt_name, yt_url, yt_label)
+                            st.success(f"'{yt_label}' 채널이 등록되었습니다.")
+                            st.rerun()
                     else:
                         st.error("이름과 URL을 모두 입력해주세요.")
 
@@ -383,14 +391,26 @@ with tab_settings:
                 bt1, bt2, _, _ = st.columns([2, 2, 6, 1])
                 with bt1:
                     if st.button("✅ 승인", key=f"rec_ok_{rec['id']}", type="primary", use_container_width=True):
-                        update_recommended_source_status(rec['id'], "approved")
-                        new_name = "".join(filter(str.isalnum, rec['label'].lower())).replace(" ", "_")
-                        # 'video' 또는 'youtube' 타입을 모두 유튜브 채널로 처리
+                        # 승인 전 중복 체크
+                        is_duplicate = False
                         if rec['source_type'] in ['video', 'youtube']:
-                            add_youtube_source("youtube_" + new_name, rec['url'], rec['label'])
+                            if any(s['channel_url'] == rec['url'] for s in yt_sources):
+                                is_duplicate = True
                         else:
-                            add_news_source(new_name, rec['url'], rec['label'])
-                        st.toast(f"{rec['label']} 등록 완료!")
+                            if any(s['url'] == rec['url'] for s in sources):
+                                is_duplicate = True
+                        
+                        if is_duplicate:
+                            st.warning("⚠️ 이미 동일한 URL의 소스가 등록되어 있습니다.")
+                            update_recommended_source_status(rec['id'], "rejected") # 중복인 경우 거절 처리하여 목록에서 제거
+                        else:
+                            update_recommended_source_status(rec['id'], "approved")
+                            new_name = "".join(filter(str.isalnum, rec['label'].lower())).replace(" ", "_")
+                            if rec['source_type'] in ['video', 'youtube']:
+                                add_youtube_source("youtube_" + new_name, rec['url'], rec['label'])
+                            else:
+                                add_news_source(new_name, rec['url'], rec['label'])
+                            st.toast(f"{rec['label']} 등록 완료!")
                         st.rerun()
                 with bt2:
                     if st.button("거절", key=f"rec_no_{rec['id']}", use_container_width=True):
