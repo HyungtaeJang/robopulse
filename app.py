@@ -13,15 +13,37 @@ import plotly.graph_objects as go
 import networkx as nx
 import threading
 import time
-# 백그라운드 스레드에서 세션 상태 접근을 위한 유포트 (버전별 예외 처리)
+# 백그라운드 스레드 컨텍스트 함수 임포트 (버전별 모든 가능성 탐색)
+add_script_run_context = None
+get_script_run_ctx = None
+
 try:
-    from streamlit.runtime.scriptrunner.script_run_context import add_script_run_context, get_script_run_ctx
-except ImportError:
+    # 1. 최신 버전 (1.30+) 공통 경로들
     try:
-        from streamlit.runtime.scriptrunner import add_script_run_context, get_script_run_ctx
+        from streamlit.runtime.scriptrunner.script_run_context import add_script_run_context, get_script_run_ctx
     except ImportError:
-        # 매우 오래된 버전 대응
-        from streamlit.scriptrunner import add_script_run_context, get_script_run_ctx
+        try:
+            from streamlit.runtime.scriptrunner import add_script_run_context, get_script_run_ctx
+        except ImportError:
+            try:
+                from streamlit.runtime.script_run_context import add_script_run_context, get_script_run_ctx
+            except ImportError:
+                # 2. 구 버전 (1.12~1.29)
+                try:
+                    from streamlit.scriptrunner import add_script_run_context, get_script_run_ctx
+                except ImportError:
+                    # 3. 최후의 수단: 모듈 내부 탐색 시도 (선택 사항)
+                    pass
+except Exception as e:
+    logger.warning(f"Streamlit 런타임 컨텍스트 함수를 로드할 수 없습니다: {e}")
+
+# 스레드 주입 함수 (임포트 실패 시 안전하게 스킵되도록 함)
+def safe_add_script_run_context(thread):
+    if add_script_run_context:
+        try:
+            add_script_run_context(thread)
+        except Exception as e:
+            logger.warning(f"스레드 컨텍스트 주입 실패 {e}")
 
 try:
     from db.vector_store import (
@@ -170,8 +192,8 @@ def run_analysis_in_background():
     # 분석 스레드 생성
     thread = threading.Thread(target=job_analyze_unprocessed, args=(analysis_callback,))
     
-    # 현재 세션의 컨텍스트를 백그라운드 스레드에 주입 (st.session_state 접근 가능하게 함)
-    add_script_run_context(thread)
+    # 안전한 방식으로 컨텍스트 주입 시도 (실패해도 분석은 진행됨)
+    safe_add_script_run_context(thread)
     
     thread.start()
 
