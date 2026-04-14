@@ -41,7 +41,7 @@ def _get_session():
     return _Session()
 
 
-def _get_lms_client() -> OpenAI:
+def get_lms_client() -> OpenAI:
     global _lms_client
     if _lms_client is None:
         # trust_env=False를 추가하여 시스템의 모든 프록시 설정을 완전히 무시하고 다이렉트 통신
@@ -57,7 +57,7 @@ def _get_lms_client() -> OpenAI:
 def _generate_embedding(text: str) -> Optional[list[float]]:
     """LM Studio의 임베딩 API를 호출하여 벡터를 생성합니다."""
     try:
-        client = _get_lms_client()
+        client = get_lms_client()
         response = client.embeddings.create(
             model="text-embedding-nomic-embed-text-v1.5",  # LM Studio에 로드된 임베딩 모델
             input=text[:2000],  # 임베딩 입력 길이 제한
@@ -304,7 +304,7 @@ def check_all_connections() -> dict:
 
     # 3. LM Studio
     try:
-        client = _get_lms_client()
+        client = get_lms_client()
         # 가벼운 모델 리스트 조회로 테스트
         client.models.list()
         results["lms"] = True

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import feedparser
-import requests
+import httpx
 from bs4 import BeautifulSoup
 from dateutil import parser as dateparser
 from dotenv import load_dotenv
@@ -41,9 +41,11 @@ class RawArticle:
 def _extract_full_text(url: str) -> str:
     """URL에서 본문 텍스트를 추출합니다 (BeautifulSoup4)."""
     try:
-        resp = requests.get(url, timeout=10, headers={"User-Agent": "RoboPulse/1.0"})
-        resp.raise_for_status()
-        soup = BeautifulSoup(resp.text, "lxml")
+        # requests -> httpx로 교체 및 프록시 설정 명시적 우회
+        with httpx.Client(proxy=None, trust_env=False, timeout=10.0) as client:
+            resp = client.get(url, headers={"User-Agent": "RoboPulse/1.0"})
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "lxml")
 
         # 주요 본문 태그 우선 탐색
         for selector in ["article", "main", ".post-content", ".article-body", "#content"]:

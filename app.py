@@ -16,7 +16,7 @@ from db.vector_store import (
     check_all_connections, get_pipeline_stats, get_latest_articles, 
     get_all_relations, semantic_search, get_all_entities_for_graph,
     init_news_sources, get_news_sources, add_news_source, 
-    delete_news_source, toggle_news_source, clear_all_data
+    delete_news_source, toggle_news_source, clear_all_data, get_lms_client
 )
 from scheduler.pipeline_scheduler import (
     start_scheduler, get_scheduler_status, job_fetch_news, job_fetch_videos
@@ -362,11 +362,11 @@ with tab_chat:
         with st.chat_message("assistant"):
             if is_live:
                 try:
-                    from openai import OpenAI as OA
-                    import httpx
-                    client = OA(base_url=os.getenv("LMS_API_BASE"), api_key="lm-studio", http_client=httpx.Client(proxy=None, trust_env=False))
                     results = semantic_search(user_input, top_k=3)
                     context = "\n".join([f"- {r['title']}: {r['summary']}" for r in results])
+                    
+                    # 공용 클라이언트 사용 (프록시 우회 자동 적용)
+                    client = get_lms_client()
                     resp = client.chat.completions.create(
                         model=LMS_MODEL_NAME,
                         messages=[{"role": "system", "content": "산업 분석가입니다. 문맥 기반 답변하세요."}, {"role": "user", "content": f"문맥: {context}\n질문: {user_input}"}],

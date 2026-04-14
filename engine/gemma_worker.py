@@ -16,6 +16,7 @@ import httpx
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
+from db.vector_store import get_lms_client
 load_dotenv()
 logger = logging.getLogger(__name__)
 
@@ -24,19 +25,7 @@ LMS_BASE_URL = os.getenv("LMS_API_BASE", "http://localhost:1234/v1")
 LMS_MODEL = os.getenv("LMS_MODEL_NAME", "gemma-4-26b")
 PROMPT_DIR = Path(__file__).parent.parent / "prompts"
 
-_client: OpenAI | None = None
-
-def _get_client() -> OpenAI:
-    global _client
-    if _client is None:
-        # 기업 보안망 프록시 우회 설정
-        http_client = httpx.Client(proxy=None, trust_env=False)
-        _client = OpenAI(
-            base_url=LMS_BASE_URL, 
-            api_key="lm-studio",
-            http_client=http_client
-        )
-    return _client
+# _get_client 대신 db.vector_store.get_lms_client를 호출합니다.
 
 
 # ---- Pydantic 출력 스키마 ----------------------------------
@@ -105,7 +94,7 @@ def analyze_article(
     system_prompt = _load_system_prompt()
 
     try:
-        client = _get_client()
+        client = get_lms_client()
         response = client.chat.completions.create(
             model=LMS_MODEL,
             messages=[
