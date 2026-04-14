@@ -44,8 +44,8 @@ def _get_session():
 def _get_lms_client() -> OpenAI:
     global _lms_client
     if _lms_client is None:
-        # 기업망 환경(프록시) 충돌 방지를 위해 빈 httpx.Client 사용
-        http_client = httpx.Client(proxies={})
+        # trust_env=False를 추가하여 시스템의 모든 프록시 설정을 완전히 무시하고 다이렉트 통신
+        http_client = httpx.Client(proxies={}, trust_env=False)
         _lms_client = OpenAI(
             base_url=LMS_BASE_URL, 
             api_key="lm-studio",
