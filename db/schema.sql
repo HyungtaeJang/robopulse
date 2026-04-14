@@ -97,3 +97,16 @@ CREATE TABLE IF NOT EXISTS pipeline_logs (
     saved       INT DEFAULT 0,                      -- DB 저장 건수
     error_msg   TEXT
 );
+-- ============================
+-- 뉴스 수집 소스 관리
+-- ============================
+CREATE TABLE IF NOT EXISTS news_sources (
+    id          SERIAL PRIMARY KEY,
+    name        TEXT UNIQUE NOT NULL,               -- 시스템 내부 식별자 (예: "techcrunch")
+    url         TEXT NOT NULL,                      -- RSS 피드 주소
+    label       TEXT NOT NULL,                      -- UI 표시용 이름 (예: "TechCrunch - Robotics")
+    is_active   BOOLEAN DEFAULT TRUE,               -- 수집 활성화 여부
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_news_sources_active ON news_sources(is_active);

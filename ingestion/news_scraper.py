@@ -17,41 +17,12 @@ from dateutil import parser as dateparser
 from dotenv import load_dotenv
 
 from engine.deduplicator import check_and_mark
-from db.vector_store import save_article
+from db.vector_store import save_article, get_news_sources
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-# ---- 수집 소스 목록 ----------------------------------------
-RSS_SOURCES: list[dict] = [
-    {
-        "name": "ieee_spectrum",
-        "url": "https://spectrum.ieee.org/feeds/topic/robotics.rss",
-        "label": "IEEE Spectrum - Robotics",
-    },
-    {
-        "name": "the_robot_report",
-        "url": "https://www.therobotreport.com/feed/",
-        "label": "The Robot Report",
-    },
-    {
-        "name": "techcrunch_robotics",
-        "url": "https://techcrunch.com/category/robotics/feed/",
-        "label": "TechCrunch - Robotics",
-    },
-    {
-        "name": "wired_robots",
-        "url": "https://www.wired.com/tag/robots/rss",
-        "label": "Wired - Robots",
-    },
-    {
-        "name": "mit_news_robotics",
-        "url": "https://news.mit.edu/topic/robotics/rss",
-        "label": "MIT News - Robotics",
-    },
-]
-
-MAX_PER_SOURCE = int(os.getenv("MAX_ARTICLES_PER_SOURCE", "20"))
+# MAX_PER_SOURCE = int(os.getenv("MAX_ARTICLES_PER_SOURCE", "20"))
 
 
 # ---- 데이터 구조 -------------------------------------------
@@ -150,10 +121,14 @@ def fetch_rss_source(source: dict) -> tuple[int, int, int]:
 
 
 def run_all_sources() -> dict:
-    """모든 RSS 소스를 순차적으로 수집합니다."""
+    """모든 RSS 소스를 DB에서 조회하여 순차적으로 수집합니다."""
     total = {"fetched": 0, "skipped": 0, "saved": 0}
+    
+    # DB에서 활성화된 소스 목록 가져오기
+    sources = get_news_sources(active_only=True)
+    max_per = int(os.getenv("MAX_ARTICLES_PER_SOURCE", "20"))
 
-    for source in RSS_SOURCES:
+    for source in sources:
         logger.info(f"수집 시작: {source['label']}")
         f, sk, sv = fetch_rss_source(source)
         total["fetched"] += f

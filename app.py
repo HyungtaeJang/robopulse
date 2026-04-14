@@ -14,7 +14,9 @@ import networkx as nx
 
 from db.vector_store import (
     check_all_connections, get_pipeline_stats, get_latest_articles, 
-    get_all_relations, semantic_search, get_all_entities_for_graph
+    get_all_relations, semantic_search, get_all_entities_for_graph,
+    init_news_sources, get_news_sources, add_news_source, 
+    delete_news_source, toggle_news_source, clear_all_data
 )
 from scheduler.pipeline_scheduler import (
     start_scheduler, get_scheduler_status, job_fetch_news, job_fetch_videos
@@ -114,9 +116,13 @@ div[data-testid="stTab"] button { font-size: 1rem !important; font-weight: 600 !
 </style>
 """, unsafe_allow_html=True)
 
-# ---- 데이터 로드 --------------------------------------------
+# ---- 데이터 로드 및 초기화 ------------------------------------
 conn_status = check_all_connections()
 is_live = conn_status["postgres"]
+
+# DB 초기화 (뉴스 소스 테이블 등)
+if is_live:
+    init_news_sources()
 
 # 그래프 복원
 if is_live and "graph_initialized" not in st.session_state:
@@ -187,12 +193,13 @@ with col_h2:
 st.markdown("")
 
 # ---- 탭 구성 ------------------------------------------------
-tab_monitor, tab_briefing, tab_graph, tab_chat = st.tabs([
-    "파이프라인 모니터링", "인텔리전스 브리핑", "지식 그래프", "AI 챗봇"
+tab_monitor, tab_briefing, tab_graph, tab_chat, tab_settings = st.tabs([
+    "파이프라인 모니터링", "인텔리전스 브리핑", "지식 그래프", "AI 챗봇", "설정 및 제어"
 ])
 
 # Tab 1: 모니터링
 with tab_monitor:
+    st.info("💡 **수집 단계**: 지정된 RSS 소스에서 실시간으로 로봇 산업 뉴스를 수집합니다.")
     c1, c2, c3, c4 = st.columns(4)
     for col, (label, val, unit) in zip([c1, c2, c3, c4], [
         ("오늘 수집", stats["today_total"], "건"),
@@ -234,9 +241,60 @@ with tab_monitor:
             st.info("상세 로그는 서버 터미널을 확인해 주세요.")
         else:
             st.code("[10:00:01] 뉴스 수집 시작...\n[10:02:15] 분석 완료 및 DB 저장", language="text")
+# Tab 5: 설정 및 제어
+with tab_settings:
+    st.markdown("### 데이터 수집 루트(RSS) 관리")
+    st.caption("시스템이 정기적으로 방문하여 로봇 뉴스를 수집할 사이트 목록입니다.")
+    
+    # 소스 추가 폼
+    with st.expander("신규 수집 소스 추가", expanded=False):
+        with st.form("add_source_form"):
+            new_label = st.text_input("사이트 이름", placeholder="예: Robotics Business Review")
+            new_url = st.text_input("RSS 피드 URL", placeholder="https://example.com/feed")
+            new_name = "".join(filter(str.isalnum, new_label.lower())).replace(" ", "_")
+            if st.form_submit_button("소스 등록"):
+                if new_label and new_url:
+                    add_news_source(new_name, new_url, new_label)
+                    st.success(f"'{new_label}' 소스가 등록되었습니다.")
+                    st.rerun()
+                else:
+                    st.error("이름과 URL을 모두 입력해주세요.")
+
+    # 소스 목록 표시
+    sources = get_news_sources()
+    if sources:
+        for src in sources:
+            sc1, sc2, sc3, sc4 = st.columns([3, 4, 1, 1])
+            with sc1: st.write(f"**{src['label']}**")
+            with sc2: st.caption(src['url'])
+            with sc3:
+                is_active = st.toggle("활성", value=src['is_active'], key=f"tog_{src['id']}")
+                if is_active != src['is_active']:
+                    toggle_news_source(src['id'], is_active)
+                    st.rerun()
+            with sc4:
+                if st.button("삭제", key=f"del_{src['id']}", type="secondary"):
+                    delete_news_source(src['id'])
+                    st.rerun()
+            st.markdown("---")
+    
+    st.markdown("### 시스템 초기화")
+    st.warning("주의: 초기화 시 수집된 모든 기사와 분석 데이터가 영구적으로 삭제됩니다.")
+    
+    reset_col1, reset_col2 = st.columns([2, 8])
+    with reset_col1:
+        if st.button("전체 데이터 초기화", type="primary", use_container_width=True):
+            if is_live:
+                with st.spinner("시스템 초기화 중..."):
+                    clear_all_data(reset_sources=True)
+                st.success("데이터베이스가 깨끗하게 비워졌습니다.")
+                st.rerun()
+            else:
+                st.error("DB가 연결되지 않았습니다.")
 
 # Tab 2: 브리핑
 with tab_briefing:
+    st.info("💡 **분석 단계**: Gemma 4 모델이 각 기사의 중요도를 평가하고 3줄 핵심 요약을 생성합니다.")
     col_f1, col_f2 = st.columns([2, 2])
     with col_f1: 
         sentiment_filter = st.multiselect("감성 필터", ["positive", "neutral", "negative"], default=["positive", "neutral", "negative"])
@@ -260,6 +318,7 @@ with tab_briefing:
 
 # Tab 3: 지식 그래프
 with tab_graph:
+    st.info("💡 **추출 단계**: 뉴스 본문에서 기업, 기술, 관계를 추출하여 산업 지형도를 시각화합니다.")
     col_g1, col_g2 = st.columns([3, 1])
     with col_g1:
         G = get_graph() if is_live else nx.DiGraph()
@@ -285,6 +344,7 @@ with tab_graph:
 
 # Tab 4: AI 챗봇
 with tab_chat:
+    st.info("💡 **활용 단계**: 수집된 최신 지식을 바탕으로 AI 분석가와 대화하며 인사이트를 얻습니다.")
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = [{"role": "assistant", "content": "로봇 산업에 대해 질문해 주세요."}]
 

@@ -356,3 +356,117 @@ def get_all_entities_for_graph() -> list[tuple[str, str]]:
         return [raw for raw in result.fetchall()]
     finally:
         session.close()
+
+
+# ---- 시스템 관리 (Sources & Initialization) -------------------
+
+def init_news_sources():
+    """뉴스 수집 소스가 없을 경우 초기 기여 데이터를 삽입합니다."""
+    session = _get_session()
+    try:
+        # 테이블이 이미 있는지 확인 (스키마 파일 외 인라인 체크)
+        session.execute(text("""
+            CREATE TABLE IF NOT EXISTS news_sources (
+                id SERIAL PRIMARY KEY,
+                name TEXT UNIQUE NOT NULL,
+                url TEXT NOT NULL,
+                label TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """))
+        
+        # 데이터가 하나도 없을 경우에만 초기 데이터 삽입
+        count = session.execute(text("SELECT count(*) FROM news_sources")).scalar()
+        if count == 0:
+            initial_sources = [
+                ("ieee_spectrum", "https://spectrum.ieee.org/feeds/topic/robotics.rss", "IEEE Spectrum - Robotics"),
+                ("the_robot_report", "https://www.therobotreport.com/feed/", "The Robot Report"),
+                ("techcrunch_robotics", "https://techcrunch.com/category/robotics/feed/", "TechCrunch - Robotics"),
+                ("wired_robots", "https://www.wired.com/tag/robots/rss", "Wired - Robots"),
+                ("mit_news_robotics", "https://news.mit.edu/topic/robotics/rss", "MIT News - Robotics")
+            ]
+            for name, url, label in initial_sources:
+                session.execute(text("""
+                    INSERT INTO news_sources (name, url, label) 
+                    VALUES (:name, :url, :label)
+                """), {"name": name, "url": url, "label": label})
+            session.commit()
+            logger.info("기본 뉴스 소스 초기화 완료")
+    except Exception as e:
+        logger.error(f"뉴스 소스 초기화 실패: {e}")
+    finally:
+        session.close()
+
+def get_news_sources(active_only=False) -> list[dict]:
+    """등록된 뉴스 소스 목록을 가져옵니다."""
+    session = _get_session()
+    try:
+        query = "SELECT * FROM news_sources"
+        if active_only:
+            query += " WHERE is_active = TRUE"
+        query += " ORDER BY id ASC"
+        result = session.execute(text(query)).fetchall()
+        return [dict(row._mapping) for row in result]
+    finally:
+        session.close()
+
+def add_news_source(name: str, url: str, label: str):
+    """새로운 뉴스 수집 소스를 추가합니다."""
+    session = _get_session()
+    try:
+        session.execute(text("""
+            INSERT INTO news_sources (name, url, label)
+            VALUES (:name, :url, :label)
+            ON CONFLICT (name) DO UPDATE SET url = EXCLUDED.url, label = EXCLUDED.label
+        """), {"name": name, "url": url, "label": label})
+        session.commit()
+    finally:
+        session.close()
+
+def delete_news_source(source_id: int):
+    """뉴스 수집 소스를 삭제합니다."""
+    session = _get_session()
+    try:
+        session.execute(text("DELETE FROM news_sources WHERE id = :id"), {"id": source_id})
+        session.commit()
+    finally:
+        session.close()
+
+def toggle_news_source(source_id: int, is_active: bool):
+    """뉴스 수집 소스의 활성화 상태를 변경합니다."""
+    session = _get_session()
+    try:
+        session.execute(text("UPDATE news_sources SET is_active = :is_active WHERE id = :id"),
+                        {"is_active": is_active, "id": source_id})
+        session.commit()
+    finally:
+        session.close()
+
+def clear_all_data(reset_sources=False):
+    """DB의 모든 기사와 지식 관계 데이터를 초기화합니다. (주의!)"""
+    session = _get_session()
+    try:
+        # 외래 키 제약 조건 등으로 인해 순서대로 삭제
+        session.execute(text("TRUNCATE TABLE news_sources, articles, entities, article_entities, relations, tags, pipeline_logs RESTART IDENTITY CASCADE"))
+        session.commit()
+        
+        # Redis 중복 방지 캐시도 비우기
+        if redis.Redis:
+            try:
+                r = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+                r.flushdb()
+                logger.info("Redis 듀플리케이터 초기화 완료")
+            except Exception:
+                pass
+        
+        # 소스 초기화가 필요한 경우 재등록
+        if reset_sources:
+            init_news_sources()
+            
+        logger.info("데이터베이스 전체 초기화 완료")
+    except Exception as e:
+        logger.error(f"데이터베이스 초기화 실패: {e}")
+        session.rollback()
+    finally:
+        session.close()
