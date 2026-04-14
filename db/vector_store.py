@@ -45,7 +45,7 @@ def _get_lms_client() -> OpenAI:
     global _lms_client
     if _lms_client is None:
         # trust_env=False를 추가하여 시스템의 모든 프록시 설정을 완전히 무시하고 다이렉트 통신
-        http_client = httpx.Client(proxies={}, trust_env=False)
+        http_client = httpx.Client(proxy=None, trust_env=False)
         _lms_client = OpenAI(
             base_url=LMS_BASE_URL, 
             api_key="lm-studio",

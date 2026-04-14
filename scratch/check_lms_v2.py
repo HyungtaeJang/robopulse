@@ -9,7 +9,7 @@ print(f"--- Diagnosing LM Studio at {url} ---")
 # 1. 최하단 레벨의 HTTP 요청 테스트 (가장 확실함)
 print("\n[Step 1] Direct HTTP Get Test (no library):")
 try:
-    with httpx.Client(proxies={}, trust_env=False, timeout=5.0) as client:
+    with httpx.Client(proxy=None, trust_env=False, timeout=5.0) as client:
         resp = client.get(f"{url}/models")
         print(f"Status: {resp.status_code}")
         if resp.status_code == 200:
@@ -25,7 +25,7 @@ try:
     client = OpenAI(
         base_url=url, 
         api_key="lm-studio", 
-        http_client=httpx.Client(proxies={}, trust_env=False)
+        http_client=httpx.Client(proxy=None, trust_env=False)
     )
     models = client.models.list()
     print(f"Library Success! Found {len(models.data)} models.")

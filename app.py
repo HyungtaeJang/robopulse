@@ -302,7 +302,7 @@ with tab_chat:
                 try:
                     from openai import OpenAI as OA
                     import httpx
-                    client = OA(base_url=os.getenv("LMS_API_BASE"), api_key="lm-studio", http_client=httpx.Client(proxies={}))
+                    client = OA(base_url=os.getenv("LMS_API_BASE"), api_key="lm-studio", http_client=httpx.Client(proxy=None, trust_env=False))
                     results = semantic_search(user_input, top_k=3)
                     context = "\n".join([f"- {r['title']}: {r['summary']}" for r in results])
                     resp = client.chat.completions.create(
