@@ -110,87 +110,101 @@ st.set_page_config(
 # ---- CSS ---------------------------------------------------
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
 
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+html, body, [class*="css"] { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
 
-.stApp { background: #080d18; }
+/* 메인 배경 - 화이트 테마 */
+.stApp { background: #f8fafc; color: #1e293b; }
 .block-container { padding-top: 1.5rem; max-width: 1400px; }
 
+/* 헤더 타이틀 */
 .hero-title {
     font-size: 2.8rem; font-weight: 900; letter-spacing: -1px;
-    background: linear-gradient(135deg, #63b3ed 0%, #9f7aea 50%, #ed64a6 100%);
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     background-clip: text; margin: 0;
 }
-.hero-sub { color: #718096; font-size: 0.95rem; margin-top: 4px; }
+.hero-sub { color: #64748b; font-size: 1rem; margin-top: 4px; font-weight: 500; }
+
+/* 사이드바 - 다크 테마 유지 및 가독성 향상 */
+[data-testid="stSidebar"] {
+    background-color: #0f172a;
+    border-right: 1px solid rgba(255,255,255,0.05);
+}
+[data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown span {
+    color: #f1f5f9 !important; /* 사이드바 다크 배경 위에서 잘 보이도록 화이트 처리 */
+}
+[data-testid="stSidebar"] label {
+    color: #94a3b8 !important;
+}
 
 .demo-badge {
     display: inline-block;
-    background: linear-gradient(90deg, rgba(237,100,166,0.2), rgba(159,122,234,0.2));
-    border: 1px solid rgba(237,100,166,0.4);
+    background: #f1f5f9; border: 1px solid #e2e8f0;
     border-radius: 20px; padding: 4px 14px;
-    color: #ed64a6; font-size: 0.75rem; font-weight: 600;
-    letter-spacing: 1px; text-transform: uppercase;
+    color: #475569; font-size: 0.75rem; font-weight: 700;
 }
 
+/* 메인 카드 스타일 */
 .metric-card {
-    background: linear-gradient(145deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-    border: 1px solid rgba(99,179,237,0.2); border-radius: 16px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0; border-radius: 16px;
     padding: 1.4rem 1.6rem;
-    transition: transform 0.2s, border-color 0.2s;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    transition: transform 0.2s, box-shadow 0.2s;
 }
-.metric-card:hover { transform: translateY(-3px); border-color: rgba(99,179,237,0.5); }
-.metric-value { font-size: 2.2rem; font-weight: 700; color: #63b3ed; }
-.metric-label { font-size: 0.8rem; color: #718096; margin-top: 4px; }
+.metric-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08); }
+.metric-value { font-size: 2.2rem; font-weight: 800; color: #4f46e5; }
+.metric-label { font-size: 0.85rem; color: #64748b; font-weight: 600; margin-top: 4px; }
 
+/* 기사 카드 스타일 */
 .article-card {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-left: 4px solid #63b3ed;
-    border-radius: 12px; padding: 1.2rem 1.4rem; margin-bottom: 1rem;
-    transition: background 0.2s, border-color 0.2s;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-left: 5px solid #6366f1;
+    border-radius: 12px; padding: 1.4rem 1.6rem; margin-bottom: 1.2rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
 }
-.article-card:hover { background: rgba(255,255,255,0.06); }
-.article-card.positive { border-left-color: #68d391; }
-.article-card.negative { border-left-color: #fc8181; }
-.article-card.neutral  { border-left-color: #63b3ed; }
+.article-card:hover { border-color: #6366f1; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.article-card.positive { border-left-color: #22c55e; }
+.article-card.negative { border-left-color: #ef4444; }
+.article-card.neutral  { border-left-color: #6366f1; }
 
-.article-title { font-size: 1rem; font-weight: 600; color: #e2e8f0; }
-.article-summary { color: #a0aec0; font-size: 0.87rem; margin: 0.6rem 0; line-height: 1.6; }
-.article-meta { font-size: 0.75rem; color: #718096; }
+.article-title { font-size: 1.15rem; font-weight: 700; color: #1e293b; line-height: 1.4; }
+.article-summary { color: #475569; font-size: 0.92rem; margin: 0.8rem 0; line-height: 1.7; }
+.article-meta { font-size: 0.8rem; color: #94a3b8; font-weight: 500; }
 
 .tag {
     display: inline-block;
-    background: rgba(99,179,237,0.1); border: 1px solid rgba(99,179,237,0.25);
-    border-radius: 20px; padding: 2px 10px; margin: 2px;
-    color: #63b3ed; font-size: 0.72rem;
+    background: #f1f5f9; border: 1px solid #e2e8f0;
+    border-radius: 6px; padding: 3px 10px; margin: 2px;
+    color: #475569; font-size: 0.75rem; font-weight: 600;
 }
 
+/* 상태 인디케이터 */
 .status-indicator {
     display: inline-flex; align-items: center; gap: 8px;
-    background: rgba(104,211,145,0.1); border: 1px solid rgba(104,211,145,0.3);
-    border-radius: 20px; padding: 6px 16px; font-size: 0.82rem; color: #68d391;
+    background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.2);
+    border-radius: 10px; padding: 8px 16px; font-size: 0.85rem; color: #15803d; font-weight: 600;
 }
 .pulse-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: #68d391; box-shadow: 0 0 8px #68d391;
-    animation: pulse 1.8s ease-in-out infinite;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #22c55e; animation: pulse 2s infinite;
 }
-@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
+@keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }
 
+/* 채팅 스타일 */
 .chat-user {
-    background: rgba(99,179,237,0.12); border: 1px solid rgba(99,179,237,0.2);
-    border-radius: 16px 16px 4px 16px; padding: 0.9rem 1.1rem; margin: 0.5rem 0;
-    color: #e2e8f0;
+    background: #f1f5f9; border-radius: 12px 12px 2px 12px;
+    padding: 1rem 1.2rem; margin: 0.6rem 0; color: #1e293b; border: 1px solid #e2e8f0;
 }
 .chat-bot {
-    background: rgba(159,122,234,0.08); border: 1px solid rgba(159,122,234,0.2);
-    border-radius: 16px 16px 16px 4px; padding: 0.9rem 1.1rem; margin: 0.5rem 0;
-    color: #e2e8f0; line-height: 1.7;
+    background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px 12px 12px 2px;
+    padding: 1rem 1.2rem; margin: 0.6rem 0; color: #1e293b; line-height: 1.8; box-shadow: 0 2px 4px rgba(0,0,0,0.02);
 }
 
-div[data-testid="stTab"] button { font-size: 0.9rem !important; }
+div[data-testid="stTab"] button { font-size: 1rem !important; font-weight: 600 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -244,6 +258,9 @@ with st.sidebar:
     status_row("PostgreSQL", conn_status["postgres"])
     status_row("Redis (Queue)", conn_status["redis"])
     status_row("LM Studio (AI)", conn_status["lms"])
+    
+    if not conn_status["lms"]:
+        st.warning("⚠️ LM Studio 연결 확인 필요 (Server ON / CORS 체크)")
 
     st.markdown("---")
     st.caption(f"Model: {LMS_MODEL_NAME.split('/')[-1]}")
