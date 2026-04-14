@@ -118,8 +118,8 @@ def rebuild_from_db(db_relations: list[dict]) -> None:
         add_analysis_to_graph(
             article_id=str(row.get("article_id", "")),
             entities=[
-                {"name": row["subject"], "type": "unknown"},
-                {"name": row["object"], "type": "unknown"},
+                {"name": row["subject"], "type": row.get("subj_type", "unknown")},
+                {"name": row["object"], "type": row.get("obj_type", "unknown")},
             ],
             relations=[row],
         )

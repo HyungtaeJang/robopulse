@@ -44,12 +44,19 @@ def _get_engine():
                     CREATE TABLE IF NOT EXISTS youtube_sources (
                         id SERIAL PRIMARY KEY,
                         name TEXT UNIQUE NOT NULL,
-                        channel_url TEXT UNIQUE NOT NULL,
+                        channel_url TEXT NOT NULL,
                         label TEXT NOT NULL,
                         is_active BOOLEAN DEFAULT TRUE,
                         created_at TIMESTAMPTZ DEFAULT NOW()
                     );
                 """))
+                
+                # 중복 데이터 자동 청소 (Migrate: 중복 제거)
+                conn.execute(text("""
+                    DELETE FROM youtube_sources a USING youtube_sources b 
+                    WHERE a.id > b.id AND a.channel_url = b.channel_url;
+                """))
+                
                 # 기존 테이블 대응: channel_url에 유니크 인덱스 추가
                 conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_youtube_sources_url ON youtube_sources(channel_url);"))
                 
@@ -384,7 +391,11 @@ def get_all_relations() -> list[dict]:
     session = _get_session()
     try:
         result = session.execute(text("""
-            SELECT r.article_id, s.name AS subject, r.predicate, o.name AS object
+            SELECT 
+                r.article_id, 
+                s.name AS subject, s.type AS subj_type,
+                r.predicate, 
+                o.name AS object, o.type AS obj_type
             FROM relations r
             JOIN entities s ON r.subject_id = s.id
             JOIN entities o ON r.object_id = o.id
@@ -434,12 +445,19 @@ def init_news_sources():
             CREATE TABLE IF NOT EXISTS news_sources (
                 id SERIAL PRIMARY KEY,
                 name TEXT UNIQUE NOT NULL,
-                url TEXT UNIQUE NOT NULL,
+                url TEXT NOT NULL,
                 label TEXT NOT NULL,
                 is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMPTZ DEFAULT NOW()
             )
         """))
+        
+        # 중복 데이터 자동 청소 (Migrate: 중복 제거)
+        session.execute(text("""
+            DELETE FROM news_sources a USING news_sources b 
+            WHERE a.id > b.id AND a.url = b.url;
+        """))
+
         # 기존 테이블 대응: url에 유니크 인덱스 추가
         session.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_news_sources_url ON news_sources(url);"))
         
