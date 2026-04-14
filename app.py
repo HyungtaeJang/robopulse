@@ -13,37 +13,52 @@ import plotly.graph_objects as go
 import networkx as nx
 import threading
 import time
-# 백그라운드 스레드 컨텍스트 함수 임포트 (버전별 모든 가능성 탐색)
-add_script_run_context = None
-get_script_run_ctx = None
-
 try:
-    # 1. 최신 버전 (1.30+) 공통 경로들
+    from streamlit.runtime.scriptrunner.script_run_context import add_script_run_context, get_script_run_ctx
+except ImportError:
     try:
-        from streamlit.runtime.scriptrunner.script_run_context import add_script_run_context, get_script_run_ctx
+        from streamlit.runtime.scriptrunner import add_script_run_context, get_script_run_ctx
     except ImportError:
-        try:
-            from streamlit.runtime.scriptrunner import add_script_run_context, get_script_run_ctx
-        except ImportError:
-            try:
-                from streamlit.runtime.script_run_context import add_script_run_context, get_script_run_ctx
-            except ImportError:
-                # 2. 구 버전 (1.12~1.29)
-                try:
-                    from streamlit.scriptrunner import add_script_run_context, get_script_run_ctx
-                except ImportError:
-                    # 3. 최후의 수단: 모듈 내부 탐색 시도 (선택 사항)
-                    pass
-except Exception as e:
-    logger.warning(f"Streamlit 런타임 컨텍스트 함수를 로드할 수 없습니다: {e}")
+        pass
 
-# 스레드 주입 함수 (임포트 실패 시 안전하게 스킵되도록 함)
-def safe_add_script_run_context(thread):
-    if add_script_run_context:
-        try:
-            add_script_run_context(thread)
-        except Exception as e:
-            logger.warning(f"스레드 컨텍스트 주입 실패 {e}")
+# ---- AI 분석 전역 상태 매니저 (0/0 현상 근본 해결용) -----------
+if "ANALYSIS_MANAGER" not in globals():
+    globals()["ANALYSIS_MANAGER"] = {
+        "active": False,
+        "current": 0,
+        "total": 0,
+        "done": False,
+        "lock": threading.Lock()
+    }
+
+def analysis_callback(current, total):
+    """백그라운드 스레드에서 호출되어 전역 상태를 업데이트하는 콜백 (Streamlit 종속성 없음)"""
+    mgr = globals()["ANALYSIS_MANAGER"]
+    with mgr["lock"]:
+        if current == -1: # 오류 발생
+            mgr["active"] = False
+            return
+        
+        mgr["current"] = current
+        mgr["total"] = total
+        
+        if current >= total and total > 0:
+            mgr["active"] = False
+            mgr["done"] = True
+
+def run_analysis_in_background():
+    """AI 분석을 백그라운드 스레드에서 시작 (전역 상태 사용)"""
+    mgr = globals()["ANALYSIS_MANAGER"]
+    with mgr["lock"]:
+        mgr["active"] = True
+        mgr["current"] = 0
+        mgr["total"] = 0
+        mgr["done"] = False
+    
+    # 분석 스레드 생성 (인자만 전달, 컨텍스트 주입 불필요)
+    thread = threading.Thread(target=job_analyze_unprocessed, args=(analysis_callback,))
+    thread.daemon = True # 프로세스 종료 시 함께 종료
+    thread.start()
 
 try:
     from db.vector_store import (
@@ -160,48 +175,19 @@ div[data-testid="stTab"] button { font-size: 1rem !important; font-weight: 600 !
 </style>
 """, unsafe_allow_html=True)
 
-# ---- 세션 스테이트 초기화 ------------------------------------
-if "analysis_active" not in st.session_state:
-    st.session_state.analysis_active = False
-if "analysis_current" not in st.session_state:
-    st.session_state.analysis_current = 0
-if "analysis_total" not in st.session_state:
-    st.session_state.analysis_total = 0
-if "analysis_done" not in st.session_state:
-    st.session_state.analysis_done = False
+# ---- 세션 스테이트 초기화 및 분석 알림 --------------------------
+if "analysis_done_toast" not in st.session_state:
+    st.session_state.analysis_done_toast = False
 
-def analysis_callback(current, total):
-    """백그라운드 스레드에서 호출되어 진행률을 업데이트하는 콜백"""
-    if current == -1: # 오류 발생
-        st.session_state.analysis_active = False
-        return
-    
-    st.session_state.analysis_current = current
-    st.session_state.analysis_total = total
-    
-    if current >= total and total > 0:
-        st.session_state.analysis_active = False
-        st.session_state.analysis_done = True
+# 전역 매니저에서 상태 읽어오기
+mgr = globals()["ANALYSIS_MANAGER"]
 
-def run_analysis_in_background():
-    """AI 분석을 백그라운드 스레드에서 시작"""
-    st.session_state.analysis_active = True
-    st.session_state.analysis_current = 0
-    st.session_state.analysis_total = 0
-    st.session_state.analysis_done = False
-    
-    # 분석 스레드 생성
-    thread = threading.Thread(target=job_analyze_unprocessed, args=(analysis_callback,))
-    
-    # 안전한 방식으로 컨텍스트 주입 시도 (실패해도 분석은 진행됨)
-    safe_add_script_run_context(thread)
-    
-    thread.start()
-
-# 분석 완료 시 토스트 알림 처리
-if st.session_state.analysis_done:
+# 분석 완료 시 세션별 토스트 알림 처리
+if mgr["done"] and not st.session_state.analysis_done_toast:
     st.toast("✅ AI 심층 분석이 완료되었습니다. 결과가 대시보드에 반영되었습니다.")
-    st.session_state.analysis_done = False
+    st.session_state.analysis_done_toast = True
+elif not mgr["done"]:
+    st.session_state.analysis_done_toast = False
 
 # ---- 데이터 로드 및 초기화 ------------------------------------
 conn_status = check_all_connections()
@@ -289,17 +275,19 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # AI 분석 진행 상태 (사이드바 하단 상시 노출)
-    if st.session_state.analysis_active:
+    # AI 분석 진행 상태 (전역 ANALYSIS_MANAGER 참조)
+    if mgr["active"]:
         st.markdown("**AI 분석 진행 중...**")
         prog_val = 0
-        if st.session_state.analysis_total > 0:
-            prog_val = st.session_state.analysis_current / st.session_state.analysis_total
+        with mgr["lock"]:
+            curr, tot = mgr["current"], mgr["total"]
+        
+        if tot > 0:
+            prog_val = curr / tot
         
         st.progress(prog_val)
-        st.caption(f"처리 중: {st.session_state.analysis_current} / {st.session_state.analysis_total}")
-        # 클릭 유도용 (진행 중일 때 화면 갱신을 독려)
-        if st.button("상태 새로고침", key="analysis_refresh"):
+        st.caption(f"처리 중: {curr} / {tot}")
+        if st.button("새로고침", key="analysis_refresh"):
             st.rerun()
 
     st.caption(f"Model: {LMS_MODEL_NAME.split('/')[-1]}")
@@ -316,10 +304,10 @@ st.markdown("")
 
 # ---- 탭 구성 ------------------------------------------------
 tab_monitor, tab_briefing, tab_graph, tab_chat, tab_settings = st.tabs([
-    "데이터 수집 자동화 모니터링", "AI 브리핑", "지식 그래프", "AI Chat", "설정 및 제어"
+    "자동화 모니터링", "AI 브리핑", "지식 그래프", "AI Chat", "설정 및 제어"
 ])
 
-# Tab 1: 데이터 수집 자동화 모니터링
+# Tab 1: 자동화 모니터링
 with tab_monitor:
     st.info("수집 단계: 지정된 RSS 소스나 유튜브 채널에서 실시간으로 관련 데이터를 수집합니다.")
     c1, c2, c3, c4 = st.columns(4)
@@ -359,7 +347,7 @@ with tab_monitor:
     st.markdown("### AI 분석")
     ca1, ca2 = st.columns(2)
     with ca1:
-        if st.session_state.analysis_active:
+        if mgr["active"]:
             st.button("AI 분석 진행 중...", use_container_width=True, type="secondary", disabled=True)
         else:
             if st.button("미처리 데이터 AI 분석", use_container_width=True, type="primary"):
