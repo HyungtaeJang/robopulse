@@ -43,11 +43,20 @@ def discover_sources():
 
         for query, search_type in [(rss_query, "news"), (yt_query, "youtube")]:
             try:
-                # 2. DuckDuckGo 검색 수행
+                import time
                 results = []
+                # 반복 요청 시 IP 블록/RateLimit(202) 방지를 위해 지연 시간 추가
+                time.sleep(2)
                 with DDGS() as ddgs:
-                    for r in ddgs.text(query, max_results=3):
-                        results.append(r)
+                    try:
+                        # html 백엔드가 좀 더 안정적임
+                        for r in ddgs.text(query, backend="html", max_results=3):
+                            results.append(r)
+                    except Exception:
+                        # 실패 시 lite 백엔드 폴백
+                        time.sleep(2)
+                        for r in ddgs.text(query, backend="lite", max_results=3):
+                            results.append(r)
                 
                 if not results:
                     continue
