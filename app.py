@@ -329,24 +329,24 @@ with tab_briefing:
             img_tag = f'<img src="{thumbnail}" class="article-thumb" alt="thumbnail">' if thumbnail else ''
             importance = art.get("importance", 0.0)
             
-            st.markdown(f"""
-<div class="article-card {sentiment}" style="display: flex; gap: 20px; align-items: stretch;">
-    {img_tag}
-    <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
-        <div>
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <a href="{art['url']}" target="_blank" class="article-title">{art['title']}</a>
-                <span class="badge-importance">⭐ {importance:.1f}</span>
+            st.html(f"""
+            <div class="article-card {sentiment}" style="display: flex; gap: 20px; align-items: stretch;">
+                {img_tag}
+                <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <a href="{art['url']}" target="_blank" class="article-title">{art['title']}</a>
+                            <span class="badge-importance">⭐ {importance:.1f}</span>
+                        </div>
+                        <p class="article-summary">{art.get('summary', '요약 정보가 없습니다.')}</p>
+                    </div>
+                    <div class="article-meta" style="font-size: 0.8rem; color: #94a3b8; display: flex; justify-content: space-between;">
+                        <span>🏢 {art.get('source')}</span>
+                        <span>🕒 {art.get('published_at')}</span>
+                    </div>
+                </div>
             </div>
-            <p class="article-summary">{art.get('summary', '요약 정보가 없습니다.')}</p>
-        </div>
-        <div class="article-meta" style="font-size: 0.8rem; color: #94a3b8; display: flex; justify-content: space-between;">
-            <span>🏢 {art.get('source')}</span>
-            <span>🕒 {art.get('published_at')}</span>
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+            """)
 
 # Tab 3: 지식 그래프
 with tab_graph:
