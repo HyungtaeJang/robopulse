@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Optional
 
 from dotenv import load_dotenv
-from openai import OpenAI
+import httpx
 import redis
 from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.orm import sessionmaker
@@ -43,7 +43,13 @@ def _get_session():
 def _get_lms_client() -> OpenAI:
     global _lms_client
     if _lms_client is None:
-        _lms_client = OpenAI(base_url=LMS_BASE_URL, api_key="lm-studio")
+        # 기업망 환경(프록시) 충돌 방지를 위해 빈 httpx.Client 사용
+        http_client = httpx.Client(proxies={})
+        _lms_client = OpenAI(
+            base_url=LMS_BASE_URL, 
+            api_key="lm-studio",
+            http_client=http_client
+        )
     return _lms_client
 
 
@@ -97,7 +103,7 @@ def save_article(article) -> Optional[str]:
             INSERT INTO articles (id, url_hash, url, source, source_type, title, content,
                                   author, published_at, embedding)
             VALUES (:id, :url_hash, :url, :source, :source_type, :title, :content,
-                    :author, :published_at, :embedding::vector)
+                    :author, :published_at, CAST(:embedding AS vector))
             ON CONFLICT (url_hash) DO NOTHING
         """), {
             "id": article_id,
