@@ -67,6 +67,41 @@ def job_fetch_news():
         logger.error(f"❌ [뉴스 파이프라인] 오류: {e}")
         raise
 
+def job_analyze_unprocessed():
+    """뉴스 수집 없이 DB에 저장된 미처리 기사들만 골라 LLM 분석을 수행합니다."""
+    from engine.gemma_worker import analyze_article
+    from engine.graph_builder import add_analysis_to_graph
+    from db.vector_store import get_unprocessed_articles, save_analysis_result
+    
+    logger.info("🤖 [미처리 데이터 분석] 시작")
+    start = datetime.now()
+    
+    try:
+        unprocessed = get_unprocessed_articles(limit=50)
+        if not unprocessed:
+            logger.info("분석할 미처리 기사가 없습니다.")
+            return
+
+        logger.info(f"LLM 분석 대상: {len(unprocessed)}건")
+        for article in unprocessed:
+            analysis = analyze_article(
+                title=article["title"],
+                content=article["content"],
+                source=article["source"],
+            )
+            if analysis:
+                save_analysis_result(article["id"], analysis)
+                add_analysis_to_graph(
+                    article_id=article["id"],
+                    entities=[e.model_dump() for e in analysis.entities],
+                    relations=[r.model_dump() for r in analysis.relations],
+                )
+        
+        elapsed = (datetime.now() - start).total_seconds()
+        logger.info(f"✅ [분석 완료] {len(unprocessed)}건 처리됨 ({elapsed:.1f}초)")
+    except Exception as e:
+        logger.error(f"❌ [분석 오류] {e}")
+
 
 def job_fetch_videos():
     """유튜브 채널 자막 수집 → LLM 분석 → DB 저장 파이프라인"""

@@ -19,7 +19,7 @@ from db.vector_store import (
     delete_news_source, toggle_news_source, clear_all_data, get_lms_client
 )
 from scheduler.pipeline_scheduler import (
-    start_scheduler, get_scheduler_status, job_fetch_news, job_fetch_videos
+    start_scheduler, get_scheduler_status, job_fetch_news, job_fetch_videos, job_analyze_unprocessed
 )
 from engine.graph_builder import get_graph, rebuild_from_db
 
@@ -233,6 +233,18 @@ with tab_monitor:
                 with st.spinner("영상 파이프라인 가동..."): job_fetch_videos()
                 st.rerun()
             else: st.warning("DB 연결이 필요합니다.")
+                
+    st.markdown("### 인텔리전스 엔진 제어")
+    ca1, ca2 = st.columns(2)
+    with ca1:
+        if st.button("미처리 데이터 AI 분석", use_container_width=True, type="secondary"):
+            if is_live:
+                with st.spinner("Gemma 4가 기사를 분석 중입니다..."):
+                    job_analyze_unprocessed()
+                st.rerun()
+            else: st.warning("DB 연결이 필요합니다.")
+    with ca2:
+        st.caption("수집은 되었으나 아직 AI 분석(요약, 엔티티 추출 등)이 완료되지 않은 기사들을 처리합니다.")
 
     # 로그 섹션
     log_label = "실시간 파이프라인 로그" if is_live else "파이프라인 로그 (데모)"
