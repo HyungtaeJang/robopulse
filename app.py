@@ -457,9 +457,12 @@ with tab_graph:
                 node_x.append(x)
                 node_y.append(y)
                 attrs = subG.nodes[node]
-                ntype = attrs.get("type", "unknown")
+                
+                # LLM이 간혹 대문자(Company)로 출력할 경우를 대비해 소문자화
+                ntype = str(attrs.get("type", "unknown")).strip().lower()
+                
                 mcount = attrs.get("mention_count", 1)
-                kor_type = translate_type.get(ntype, "분류 없음")
+                kor_type = translate_type.get(ntype, "기타")
                 degree = subG.degree(node)
                 
                 node_colors.append(color_map.get(ntype, color_map["unknown"]))
