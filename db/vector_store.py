@@ -243,6 +243,31 @@ def get_unprocessed_articles(limit: int = 50) -> list[dict]:
         session.close()
 
 
+def get_pipeline_stats() -> dict:
+    """모니터링 대시보드용 파이프라인 통계를 반환합니다."""
+    session = _get_session()
+    try:
+        stats = {}
+
+        result = session.execute(text("""
+            SELECT
+                COUNT(*) FILTER (WHERE collected_at::date = CURRENT_DATE) AS today_total,
+                COUNT(*) FILTER (WHERE is_processed = TRUE AND processed_at::date = CURRENT_DATE) AS today_processed,
+                COUNT(*) FILTER (WHERE is_processed = FALSE) AS pending,
+                COUNT(*) AS total
+            FROM articles
+        """))
+        row = result.fetchone()
+        stats.update(dict(row._mapping))
+
+        result2 = session.execute(text("""
+            SELECT source, COUNT(*) AS count, MAX(collected_at) AS last_collected
+            FROM articles
+            GROUP BY source
+            ORDER BY last_collected DESC
+        """))
+        stats["sources"] = [dict(r._mapping) for r in result2.fetchall()]
+
         return stats
     finally:
         session.close()
