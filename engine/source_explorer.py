@@ -10,7 +10,7 @@ from datetime import datetime
 from duckduckgo_search import DDGS
 from engine.graph_builder import get_entity_stats
 from db.vector_store import get_lms_client, add_recommended_source
-from engine.gemma_worker import LMS_MODEL_NAME
+from engine.gemma_worker import LMS_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ def discover_sources():
 }}
 """
                 resp = client.chat.completions.create(
-                    model=LMS_MODEL_NAME,
+                    model=LMS_MODEL,
                     messages=[
                         {"role": "system", "content": "당신은 AI 데이터 엔지니어입니다."},
                         {"role": "user", "content": prompt}
