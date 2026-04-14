@@ -29,29 +29,7 @@ logger = logging.getLogger(__name__)
 
 MAX_PER_CHANNEL = int(os.getenv("MAX_ARTICLES_PER_SOURCE", "10"))
 
-# ---- 수집 채널 목록 ----------------------------------------
-YOUTUBE_CHANNELS: list[dict] = [
-    {
-        "name": "youtube_boston_dynamics",
-        "channel_url": "https://www.youtube.com/@BostonDynamics",
-        "label": "Boston Dynamics",
-    },
-    {
-        "name": "youtube_agility_robotics",
-        "channel_url": "https://www.youtube.com/@AgilityRobotics",
-        "label": "Agility Robotics",
-    },
-    {
-        "name": "youtube_ieee_robotics",
-        "channel_url": "https://www.youtube.com/@IEEERobotics",
-        "label": "IEEE Robotics & Automation",
-    },
-    {
-        "name": "youtube_cnet",
-        "channel_url": "https://www.youtube.com/@CNET",
-        "label": "CNET Highlights",
-    },
-]
+# ---- 수집 채널 목록 (현재는 DB에서 동적으로 관리됨) ----
 
 
 def _fetch_channel_videos(channel_url: str, max_count: int = MAX_PER_CHANNEL) -> list[dict]:
@@ -176,9 +154,13 @@ def fetch_channel(channel: dict) -> tuple[int, int, int]:
 
 def run_all_channels() -> dict:
     """모든 유튜브 채널을 순차적으로 수집합니다."""
+    from db.vector_store import get_youtube_sources
+    
     total = {"fetched": 0, "skipped": 0, "saved": 0}
+    
+    active_channels = [ch for ch in get_youtube_sources() if ch["is_active"]]
 
-    for channel in YOUTUBE_CHANNELS:
+    for channel in active_channels:
         logger.info(f"채널 수집 시작: {channel['label']}")
         f, sk, sv = fetch_channel(channel)
         total["fetched"] += f

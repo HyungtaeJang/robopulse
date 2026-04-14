@@ -39,6 +39,40 @@ def _get_engine():
             with _engine.connect() as conn:
                 conn.execute(text("ALTER TABLE articles ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;"))
                 
+                # 새 기능: youtube_sources 및 recommended_sources 테이블 생성
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS youtube_sources (
+                        id SERIAL PRIMARY KEY,
+                        name TEXT UNIQUE NOT NULL,
+                        channel_url TEXT NOT NULL,
+                        label TEXT NOT NULL,
+                        is_active BOOLEAN DEFAULT TRUE,
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """))
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS recommended_sources (
+                        id SERIAL PRIMARY KEY,
+                        url TEXT UNIQUE NOT NULL,
+                        source_type TEXT NOT NULL,
+                        label TEXT,
+                        reason TEXT,
+                        status TEXT DEFAULT 'pending',
+                        created_at TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """))
+                
+                # 기존 youtube_channels 하드코딩 데이터를 테이블로 이전 (최초 1회)
+                conn.execute(text("""
+                    INSERT INTO youtube_sources (name, channel_url, label)
+                    VALUES 
+                    ('youtube_boston_dynamics', 'https://www.youtube.com/@BostonDynamics', 'Boston Dynamics'),
+                    ('youtube_agility_robotics', 'https://www.youtube.com/@AgilityRobotics', 'Agility Robotics'),
+                    ('youtube_ieee_robotics', 'https://www.youtube.com/@IEEERobotics', 'IEEE Robotics & Automation'),
+                    ('youtube_cnet', 'https://www.youtube.com/@cnet', 'CNET Technology')
+                    ON CONFLICT DO NOTHING;
+                """))
+
                 # 기존 유튜브 영상 썸네일 일괄 복구
                 conn.execute(text("""
                     UPDATE articles 
@@ -496,5 +530,69 @@ def clear_all_data(reset_sources=False):
     except Exception as e:
         logger.error(f"데이터베이스 초기화 실패: {e}")
         session.rollback()
+    finally:
+        session.close()
+
+# ---- 유튜브 소스 CRUD --------------------------------------
+def get_youtube_sources() -> list[dict]:
+    session = _get_session()
+    try:
+        result = session.execute(text("SELECT id, name, channel_url, label, is_active FROM youtube_sources ORDER BY id"))
+        return [{"id": r[0], "name": r[1], "channel_url": r[2], "label": r[3], "is_active": r[4]} for r in result]
+    finally:
+        session.close()
+
+def add_youtube_source(name: str, channel_url: str, label: str):
+    session = _get_session()
+    try:
+        session.execute(text("""
+            INSERT INTO youtube_sources (name, channel_url, label) 
+            VALUES (:n, :u, :l) ON CONFLICT(name) DO NOTHING
+        """), {"n": name, "u": channel_url, "l": label})
+        session.commit()
+    finally:
+        session.close()
+
+def toggle_youtube_source(source_id: int, is_active: bool):
+    session = _get_session()
+    try:
+        session.execute(text("UPDATE youtube_sources SET is_active = :i WHERE id = :id"), {"i": is_active, "id": source_id})
+        session.commit()
+    finally:
+        session.close()
+
+def delete_youtube_source(source_id: int):
+    session = _get_session()
+    try:
+        session.execute(text("DELETE FROM youtube_sources WHERE id = :id"), {"id": source_id})
+        session.commit()
+    finally:
+        session.close()
+
+# ---- 추천 소스(Auto-Discovery) CRUD --------------------------
+def get_recommended_sources() -> list[dict]:
+    session = _get_session()
+    try:
+        result = session.execute(text("SELECT id, url, source_type, label, reason, status FROM recommended_sources WHERE status='pending' ORDER BY id DESC"))
+        return [{"id": r[0], "url": r[1], "source_type": r[2], "label": r[3], "reason": r[4], "status": r[5]} for r in result]
+    finally:
+        session.close()
+
+def add_recommended_source(url: str, source_type: str, label: str, reason: str):
+    session = _get_session()
+    try:
+        session.execute(text("""
+            INSERT INTO recommended_sources (url, source_type, label, reason)
+            VALUES (:u, :t, :l, :r) ON CONFLICT(url) DO NOTHING
+        """), {"u": url, "t": source_type, "l": label, "r": reason})
+        session.commit()
+    finally:
+        session.close()
+
+def update_recommended_source_status(req_id: int, status: str):
+    session = _get_session()
+    try:
+        session.execute(text("UPDATE recommended_sources SET status = :s WHERE id = :id"), {"s": status, "id": req_id})
+        session.commit()
     finally:
         session.close()

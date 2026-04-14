@@ -12,16 +12,21 @@ import streamlit as st
 import plotly.graph_objects as go
 import networkx as nx
 
-from db.vector_store import (
-    check_all_connections, get_pipeline_stats, get_latest_articles, 
-    get_all_relations, semantic_search, get_all_entities_for_graph,
-    init_news_sources, get_news_sources, add_news_source, 
-    delete_news_source, toggle_news_source, clear_all_data, get_lms_client
-)
-from scheduler.pipeline_scheduler import (
-    start_scheduler, get_scheduler_status, job_fetch_news, job_fetch_videos, job_analyze_unprocessed
-)
-from engine.graph_builder import get_graph, rebuild_from_db
+try:
+    from db.vector_store import (
+        check_all_connections, get_pipeline_stats, get_latest_articles, 
+        get_all_articles, clear_all_data, 
+        get_news_sources, add_news_source, toggle_news_source, delete_news_source,
+        get_youtube_sources, get_recommended_sources, get_lms_client
+    )
+    from scheduler.pipeline_scheduler import (
+        start_scheduler, get_scheduler_status, job_fetch_news, job_fetch_videos, job_analyze_unprocessed
+    )
+    from engine.graph_builder import get_graph, rebuild_from_db, get_entity_stats
+    from engine.gemma_worker import semantic_search
+    is_live = True
+except Exception as e:
+    is_live = False
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 logging.basicConfig(level=logging.INFO)
@@ -290,6 +295,80 @@ with tab_settings:
             with sc4:
                 if st.button("삭제", key=f"del_{src['id']}", type="secondary"):
                     delete_news_source(src['id'])
+                    st.rerun()
+            st.markdown("---")
+            
+    st.markdown("### 유튜브 채널 수집 루트 관리")
+    st.caption("AI가 영상을 시청하고 자막을 분석할 공식 유튜브 채널 목록입니다.")
+    
+    with st.expander("신규 유튜브 채널 추가", expanded=False):
+        with st.form("add_yt_form"):
+            yt_label = st.text_input("채널 이름", placeholder="예: Figure AI")
+            yt_url = st.text_input("채널 홈 URL", placeholder="https://www.youtube.com/@FigureAI")
+            yt_name = "youtube_" + "".join(filter(str.isalnum, yt_label.lower())).replace(" ", "_")
+            if st.form_submit_button("채널 등록"):
+                if yt_label and yt_url:
+                    from db.vector_store import add_youtube_source
+                    add_youtube_source(yt_name, yt_url, yt_label)
+                    st.success(f"'{yt_label}' 채널이 등록되었습니다.")
+                    st.rerun()
+                else:
+                    st.error("이름과 URL을 모두 입력해주세요.")
+
+    yt_sources = get_youtube_sources() if is_live else []
+    if yt_sources:
+        for src in yt_sources:
+            sc1, sc2, sc3, sc4 = st.columns([3, 4, 1, 1])
+            with sc1: st.write(f"**{src['label']}**")
+            with sc2: st.caption(src['channel_url'])
+            with sc3:
+                is_active = st.toggle("활성", value=src['is_active'], key=f"yt_tog_{src['id']}")
+                if is_active != src['is_active']:
+                    from db.vector_store import toggle_youtube_source
+                    toggle_youtube_source(src['id'], is_active)
+                    st.rerun()
+            with sc4:
+                if st.button("삭제", key=f"yt_del_{src['id']}", type="secondary"):
+                    from db.vector_store import delete_youtube_source
+                    delete_youtube_source(src['id'])
+                    st.rerun()
+            st.markdown("---")
+
+    st.markdown("### 🤖 AI 자율 탐색 추천함")
+    st.caption("로컬 LLM이 검색 엔진을 통해 유망한 로봇/기술 기업의 채널이나 RSS를 추천합니다.")
+    
+    col_a1, col_a2 = st.columns([8, 2])
+    with col_a2:
+        if st.button("새 소스 탐색하기", help="DB의 최신 엔티티를 활용해 백그라운드 탐색을 시작합니다."):
+            with st.spinner("DuckDuckGo 쿼리 및 Gemma 검증 중... (최대 1~2분 소요)"):
+                from engine.source_explorer import discover_sources
+                discover_sources()
+            st.success("자율 탐색이 완료되었습니다.")
+            st.rerun()
+            
+    rec_sources = get_recommended_sources() if is_live else []
+    if not rec_sources:
+        st.info("현재 대기 중인 추천 소스가 없습니다.")
+    else:
+        for rec in rec_sources:
+            st.markdown(f"**{rec['label']}** (`{rec['source_type']}`)")
+            st.caption(f"추천 사유: {rec['reason']} | 링크: {rec['url']}")
+            bt1, bt2, _, _ = st.columns([2, 2, 6, 1])
+            with bt1:
+                if st.button("✅ 승인", key=f"rec_ok_{rec['id']}", type="primary"):
+                    from db.vector_store import update_recommended_source_status, add_news_source, add_youtube_source
+                    update_recommended_source_status(rec['id'], "approved")
+                    new_name = "".join(filter(str.isalnum, rec['label'].lower())).replace(" ", "_")
+                    if rec['source_type'] == 'youtube':
+                        add_youtube_source("youtube_" + new_name, rec['url'], rec['label'])
+                    else:
+                        add_news_source(new_name, rec['url'], rec['label'])
+                    st.toast(f"{rec['label']} 등록 완료!")
+                    st.rerun()
+            with bt2:
+                if st.button("거절", key=f"rec_no_{rec['id']}"):
+                    from db.vector_store import update_recommended_source_status
+                    update_recommended_source_status(rec['id'], "rejected")
                     st.rerun()
             st.markdown("---")
     st.markdown("### 야간 AI 심층 분석 스케줄링")
