@@ -13,6 +13,7 @@ import plotly.graph_objects as go
 import networkx as nx
 import threading
 import time
+from streamlit.runtime.scriptrunner import add_script_run_context, get_script_run_ctx
 
 try:
     from db.vector_store import (
@@ -158,7 +159,12 @@ def run_analysis_in_background():
     st.session_state.analysis_total = 0
     st.session_state.analysis_done = False
     
+    # 분석 스레드 생성
     thread = threading.Thread(target=job_analyze_unprocessed, args=(analysis_callback,))
+    
+    # 현재 세션의 컨텍스트를 백그라운드 스레드에 주입 (st.session_state 접근 가능하게 함)
+    add_script_run_context(thread)
+    
     thread.start()
 
 # 분석 완료 시 토스트 알림 처리
@@ -271,7 +277,7 @@ with st.sidebar:
 col_h1, col_h2 = st.columns([8, 2])
 with col_h1:
     st.markdown('<h1 class="hero-title">RoboPulse Intelligence</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="hero-sub">홈로봇 산업 인텔리전스 엔진 — Powered by Local Gemma 4</p>', unsafe_allow_html=True)
+    st.markdown('<p class="hero-sub">홈로봇 관련 데이터 수집 자동화 엔진 — Powered by Local Gemma 4</p>', unsafe_allow_html=True)
 with col_h2:
     st.markdown(f"<div style='text-align:right;color:#94a3b8;font-size:0.8rem;padding-top:14px'>{datetime.now().strftime('%m/%d %H:%M')}</div>", unsafe_allow_html=True)
 
@@ -279,12 +285,12 @@ st.markdown("")
 
 # ---- 탭 구성 ------------------------------------------------
 tab_monitor, tab_briefing, tab_graph, tab_chat, tab_settings = st.tabs([
-    "파이프라인 모니터링", "인텔리전스 브리핑", "지식 그래프", "AI 챗봇", "설정 및 제어"
+    "데이터 수집 자동화 모니터링", "AI 브리핑", "지식 그래프", "AI Chat", "설정 및 제어"
 ])
 
 # Tab 1: 모니터링
 with tab_monitor:
-    st.info("💡 **수집 단계**: 지정된 RSS 소스에서 실시간으로 로봇 산업 뉴스를 수집합니다.")
+    st.info("지정된 RSS 소스나 유튜브 채널에서 실시간으로 관련 데이터를 수집합니다.")
     c1, c2, c3, c4 = st.columns(4)
     for col, (label, val, unit) in zip([c1, c2, c3, c4], [
         ("오늘 수집", stats["today_total"], "건"),
@@ -295,7 +301,7 @@ with tab_monitor:
         with col:
             st.markdown(f'<div class="metric-card"><div class="metric-value">{val}</div><div class="metric-label">{label} ({unit})</div></div>', unsafe_allow_html=True)
 
-    st.markdown("### 소스별 수집 현황")
+    st.markdown("### 데이터 수집 현황")
     if stats["sources"]:
         import pandas as pd
         df = pd.DataFrame(stats["sources"])
@@ -304,22 +310,22 @@ with tab_monitor:
     else:
         st.info("수집된 데이터 소스가 없습니다.")
 
-    st.markdown("### 수동 조작")
+    st.markdown("### 데이터 수집")
     cb1, cb2 = st.columns(2)
     with cb1:
         if st.button("뉴스 수집 실행", use_container_width=True, type="primary"):
             if is_live:
-                with st.spinner("뉴스 파이프라인 가동..."): job_fetch_news()
+                with st.spinner("뉴스 수집 중..."): job_fetch_news()
                 st.rerun()
             else: st.warning("DB 연결이 필요합니다.")
     with cb2:
         if st.button("영상 수집 실행", use_container_width=True):
             if is_live:
-                with st.spinner("영상 파이프라인 가동..."): job_fetch_videos()
+                with st.spinner("영상 수집 중..."): job_fetch_videos()
                 st.rerun()
             else: st.warning("DB 연결이 필요합니다.")
                 
-    st.markdown("### 인텔리전스 엔진 제어")
+    st.markdown("### AI 분석")
     ca1, ca2 = st.columns(2)
     with ca1:
         if st.session_state.analysis_active:
@@ -328,7 +334,7 @@ with tab_monitor:
             if st.button("미처리 데이터 AI 분석", use_container_width=True, type="primary"):
                 if is_live:
                     run_analysis_in_background()
-                    st.toast("🚀 AI 분석을 백그라운드에서 시작합니다.")
+                    st.toast("AI 분석을 백그라운드에서 시작합니다.")
                     st.rerun()
                 else: 
                     st.warning("DB 연결이 필요합니다.")
@@ -336,7 +342,7 @@ with tab_monitor:
         st.caption("수집은 되었으나 아직 AI 분석(요약, 엔티티 추출 등)이 완료되지 않은 기사들을 처리합니다.")
 
     # 로그 섹션
-    log_label = "실시간 파이프라인 로그" if is_live else "파이프라인 로그 (데모)"
+    log_label = "LOGS" if is_live else "파이프라인 로그 (데모)"
     with st.expander(log_label, expanded=is_live):
         if is_live:
             st.info("상세 로그는 서버 터미널을 확인해 주세요.")
