@@ -363,7 +363,8 @@ with tab_settings:
                     if st.button("✅ 승인", key=f"rec_ok_{rec['id']}", type="primary", use_container_width=True):
                         update_recommended_source_status(rec['id'], "approved")
                         new_name = "".join(filter(str.isalnum, rec['label'].lower())).replace(" ", "_")
-                        if rec['source_type'] == 'youtube':
+                        # 'video' 또는 'youtube' 타입을 모두 유튜브 채널로 처리
+                        if rec['source_type'] in ['video', 'youtube']:
                             add_youtube_source("youtube_" + new_name, rec['url'], rec['label'])
                         else:
                             add_news_source(new_name, rec['url'], rec['label'])
