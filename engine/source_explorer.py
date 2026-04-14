@@ -6,7 +6,12 @@ duckduckgo-search를 이용해 실시간 웹 정보를 가져오고 Gemma로 판
 """
 import logging
 import json
+import warnings
 from datetime import datetime
+
+# 향후 패키지명(ddgs) 변경 예고인 RuntimeWarning 숨김 처리
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="duckduckgo_search.*")
+
 from duckduckgo_search import DDGS
 from engine.graph_builder import get_entity_stats
 from db.vector_store import get_lms_client, add_recommended_source
