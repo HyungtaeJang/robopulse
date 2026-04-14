@@ -314,12 +314,14 @@ with tab_briefing:
     st.info("💡 **심층 분석**: Gemma 4 모델이 각 소스의 중요도를 평가하고 3줄 핵심 요약을 제공하는 인텔리전스 보고서입니다.")
     col_f1, col_f2 = st.columns([2, 2])
     with col_f1: 
-        sentiment_filter = st.multiselect("감성 필터", ["positive", "neutral", "negative"], default=["positive", "neutral", "negative"])
+        sentiment_options = {"positive": "긍정", "neutral": "중립", "negative": "부정"}
+        selected_labels = st.multiselect("감성 필터", list(sentiment_options.values()), default=list(sentiment_options.values()))
+        sentiment_filter = [k for k, v in sentiment_options.items() if v in selected_labels]
     with col_f2:
         min_importance = st.slider("최소 중요도", 0.0, 10.0, 3.0)
 
     st.markdown("---")
-    filtered = [a for a in articles if a.get("sentiment") in sentiment_filter and a.get("importance", 0) >= min_importance]
+    filtered = [a for a in articles if a.get("sentiment", "neutral") in sentiment_filter and a.get("importance", 0) >= min_importance]
     if not filtered:
         st.info("조건에 맞는 결과가 없습니다.")
     else:
@@ -328,6 +330,8 @@ with tab_briefing:
             thumbnail = art.get("thumbnail_url")
             img_tag = f'<img src="{thumbnail}" class="article-thumb" alt="thumbnail">' if thumbnail else ''
             importance = art.get("importance", 0.0)
+            pub_date = art.get('published_at')
+            pub_date_str = pub_date.strftime("%Y-%m-%d %H:%M") if hasattr(pub_date, "strftime") else (pub_date or "날짜 정보 없음")
             
             st.html(f"""
             <div class="article-card {sentiment}" style="display: flex; gap: 20px; align-items: stretch;">
@@ -342,7 +346,7 @@ with tab_briefing:
                     </div>
                     <div class="article-meta" style="font-size: 0.8rem; color: #94a3b8; display: flex; justify-content: space-between;">
                         <span>🏢 {art.get('source')}</span>
-                        <span>🕒 {art.get('published_at')}</span>
+                        <span>🕒 {pub_date_str}</span>
                     </div>
                 </div>
             </div>
