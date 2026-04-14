@@ -12,7 +12,8 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from openai import OpenAI
-from sqlalchemy import create_engine, text
+import redis
+from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.orm import sessionmaker
 
 load_dotenv()
@@ -242,31 +243,84 @@ def get_unprocessed_articles(limit: int = 50) -> list[dict]:
         session.close()
 
 
-def get_pipeline_stats() -> dict:
-    """모니터링 대시보드용 파이프라인 통계를 반환합니다."""
+        return stats
+    finally:
+        session.close()
+
+
+def check_all_connections() -> dict:
+    """PostgreSQL, Redis, LM Studio의 연결 상태를 체크합니다."""
+    results = {"postgres": False, "redis": False, "lms": False}
+
+    # 1. Postgres
+    try:
+        engine = _get_engine()
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        results["postgres"] = True
+    except Exception:
+        pass
+
+    # 2. Redis
+    try:
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        r = redis.from_url(redis_url, socket_connect_timeout=1)
+        if r.ping():
+            results["redis"] = True
+    except Exception:
+        pass
+
+    # 3. LM Studio
+    try:
+        client = _get_lms_client()
+        # 가벼운 모델 리스트 조회로 테스트
+        client.models.list()
+        results["lms"] = True
+    except Exception:
+        pass
+
+    return results
+
+
+def get_all_relations() -> list[dict]:
+    """지식 그래프 복원을 위해 모든 관계 데이터를 가져옵니다."""
     session = _get_session()
     try:
-        stats = {}
-
         result = session.execute(text("""
-            SELECT
-                COUNT(*) FILTER (WHERE collected_at::date = CURRENT_DATE) AS today_total,
-                COUNT(*) FILTER (WHERE is_processed = TRUE AND processed_at::date = CURRENT_DATE) AS today_processed,
-                COUNT(*) FILTER (WHERE is_processed = FALSE) AS pending,
-                COUNT(*) AS total
-            FROM articles
+            SELECT r.article_id, s.name AS subject, r.predicate, o.name AS object
+            FROM relations r
+            JOIN entities s ON r.subject_id = s.id
+            JOIN entities o ON r.object_id = o.id
         """))
-        row = result.fetchone()
-        stats.update(dict(row._mapping))
+        return [dict(row._mapping) for row in result.fetchall()]
+    finally:
+        session.close()
 
-        result2 = session.execute(text("""
-            SELECT source, COUNT(*) AS count, MAX(collected_at) AS last_collected
-            FROM articles
-            GROUP BY source
-            ORDER BY last_collected DESC
-        """))
-        stats["sources"] = [dict(r._mapping) for r in result2.fetchall()]
 
-        return stats
+def get_latest_articles(limit: int = 20, min_importance: float = 0.0) -> list[dict]:
+    """분석 완료된 최신 기사를 가져옵니다."""
+    session = _get_session()
+    try:
+        result = session.execute(text("""
+            SELECT a.id, a.title, a.url, a.source, a.summary, a.sentiment, a.importance, a.published_at,
+                   array_agg(t.category) AS tags
+            FROM articles a
+            LEFT JOIN tags t ON a.id = t.article_id
+            WHERE a.is_processed = TRUE AND a.importance >= :min_imp
+            GROUP BY a.id
+            ORDER BY a.published_at DESC
+            LIMIT :limit
+        """), {"limit": limit, "min_imp": min_importance})
+        return [dict(row._mapping) for row in result.fetchall()]
+    finally:
+        session.close()
+
+
+def get_all_entities_for_graph() -> list[tuple[str, str]]:
+    """모든 엔티티 노드 데이터를 가져옵니다."""
+    session = _get_session()
+    try:
+        result = session.execute(text("SELECT name, type FROM entities"))
+        return [raw for raw in result.fetchall()]
     finally:
         session.close()

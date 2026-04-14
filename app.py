@@ -12,8 +12,21 @@ import streamlit as st
 import plotly.graph_objects as go
 import networkx as nx
 
+from db.vector_store import (
+    check_all_connections, get_pipeline_stats, get_latest_articles, 
+    get_all_relations, semantic_search, get_all_entities_for_graph
+)
+from scheduler.pipeline_scheduler import (
+    start_scheduler, get_scheduler_status, job_fetch_news, job_fetch_videos
+)
+from engine.graph_builder import get_graph, rebuild_from_db
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# 모델 식별자 (사용자 지정)
+LMS_MODEL_NAME = os.getenv("LMS_MODEL_NAME", "lmstudio-community/gemma-4-26b-a4b-it")
 
 # ---- 데모 샘플 데이터 ----------------------------------------
 DEMO_ARTICLES = [
@@ -181,24 +194,60 @@ div[data-testid="stTab"] button { font-size: 0.9rem !important; }
 </style>
 """, unsafe_allow_html=True)
 
+# ---- 상태 체크 및 데이터 로드 -----------------------------------
+conn_status = check_all_connections()
+is_live = conn_status["postgres"]
+
+# 그래프 복원 (앱 시작 시 한 번)
+if is_live and "graph_initialized" not in st.session_state:
+    relations = get_all_relations()
+    rebuild_from_db(relations)
+    st.session_state.graph_initialized = True
+
+# 데이터 로드
+if is_live:
+    stats = get_pipeline_stats()
+    articles = get_latest_articles(limit=20)
+    scheduler_jobs = get_scheduler_status()
+else:
+    stats = DEMO_STATS
+    articles = DEMO_ARTICLES
+    scheduler_jobs = []
+
 # ---- 사이드바 -----------------------------------------------
 with st.sidebar:
     st.markdown('<p class="hero-title" style="font-size:1.6rem">🤖 RoboPulse</p>', unsafe_allow_html=True)
-    st.markdown('<span class="demo-badge">✦ Demo Mode</span>', unsafe_allow_html=True)
+    if is_live:
+        st.markdown('<span class="demo-badge" style="background:rgba(104,211,145,0.1);border-color:rgba(104,211,145,0.4);color:#68d391">✦ Live Mode</span>', unsafe_allow_html=True)
+    else:
+        st.markdown('<span class="demo-badge">✦ Demo Mode</span>', unsafe_allow_html=True)
     st.markdown("---")
 
     st.markdown("**⚙️ 시스템 상태**")
-    st.markdown('<div class="status-indicator"><span class="pulse-dot"></span>스케줄러 대기 중</div>', unsafe_allow_html=True)
+    sched_running = any(j for j in scheduler_jobs)
+    if sched_running:
+        st.markdown('<div class="status-indicator"><span class="pulse-dot"></span>파이프라인 가동 중</div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div class="status-indicator" style="background:rgba(113,128,150,0.1);border-color:rgba(113,128,150,0.3);color:#718096"><span class="pulse-dot" style="background:#718096;box-shadow:none"></span>스케줄러 대기 중</div>', unsafe_allow_html=True)
+        if st.button("🚀 자동화 시작", use_container_width=True):
+            start_scheduler()
+            st.rerun()
+
     st.markdown("")
-    st.markdown("**🗄️ DB 연결**")
-    st.error("PostgreSQL 미연결\n(데모 데이터로 실행 중)")
+    st.markdown("**🔌 연결 상태**")
+    
+    def status_row(label, connected):
+        color = "#68d391" if connected else "#fc8181"
+        icon = "●"
+        st.markdown(f"<div style='font-size:0.85rem; display:flex; justify-content:space-between; color:#e2e8f0'><span>{label}</span><span style='color:{color}'>{icon}</span></div>", unsafe_allow_html=True)
+
+    status_row("PostgreSQL", conn_status["postgres"])
+    status_row("Redis (Queue)", conn_status["redis"])
+    status_row("LM Studio (AI)", conn_status["lms"])
 
     st.markdown("---")
-    st.markdown("**🔌 연결 설정**")
-    st.code("localhost:1234  ← LM Studio\nlocalhost:5432  ← PostgreSQL\nlocalhost:6379  ← Redis", language="text")
-    st.markdown("---")
-    st.caption("Gemma 4 26B · LM Studio · Mac M1 Max")
-
+    st.caption(f"Model: {LMS_MODEL_NAME.split('/')[-1]}")
+    st.caption("Engine: Gemma 4 26B (Local)")
 # ---- 헤더 ---------------------------------------------------
 col1, col2 = st.columns([8, 2])
 with col1:
@@ -226,10 +275,10 @@ with tab_monitor:
 
     c1, c2, c3, c4 = st.columns(4)
     metrics = [
-        ("오늘 수집", DEMO_STATS["today_total"], "건", "#63b3ed"),
-        ("분석 완료", DEMO_STATS["today_processed"], "건", "#68d391"),
-        ("대기 중", DEMO_STATS["pending"], "건", "#f6ad55"),
-        ("누적 기사", DEMO_STATS["total"], "건", "#9f7aea"),
+        ("오늘 수집", stats["today_total"], "건", "#63b3ed"),
+        ("분석 완료", stats["today_processed"], "건", "#68d391"),
+        ("대기 중", stats["pending"], "건", "#f6ad55"),
+        ("누적 기사", stats["total"], "건", "#9f7aea"),
     ]
     for col, (label, val, unit, color) in zip([c1, c2, c3, c4], metrics):
         with col:
@@ -244,28 +293,30 @@ with tab_monitor:
     st.markdown("#### 소스별 수집 현황")
 
     import pandas as pd
-    df = pd.DataFrame(DEMO_STATS["sources"])
-    df.columns = ["소스", "누적 수집", "마지막 수집"]
+    df = pd.DataFrame(stats["sources"])
+    if not df.empty:
+        df.columns = ["소스", "누적 수집", "마지막 수집"]
 
-    # 막대 차트
-    fig = go.Figure(go.Bar(
-        x=df["소스"], y=df["누적 수집"],
-        marker=dict(
-            color=df["누적 수집"],
-            colorscale=[[0, "rgba(99,179,237,0.4)"], [1, "rgba(99,179,237,0.9)"]],
-        ),
-        text=df["누적 수집"], textposition="outside",
-    ))
-    fig.update_layout(
-        height=280, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="#a0aec0", size=12),
-        xaxis=dict(showgrid=False, tickfont=dict(size=11)),
-        yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
-        margin=dict(t=20, b=10, l=0, r=0),
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-    st.dataframe(df, use_container_width=True, hide_index=True)
+        # 막대 차트
+        fig = go.Figure(go.Bar(
+            x=df["소스"], y=df["누적 수집"],
+            marker=dict(
+                color=df["누적 수집"],
+                colorscale=[[0, "rgba(99,179,237,0.4)"], [1, "rgba(99,179,237,0.9)"]],
+            ),
+            text=df["누적 수집"], textposition="outside",
+        ))
+        fig.update_layout(
+            height=280, paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#a0aec0", size=12),
+            xaxis=dict(showgrid=False, tickfont=dict(size=11)),
+            yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+            margin=dict(t=20, b=10, l=0, r=0),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("수집된 소스 정보가 없습니다.")
 
     st.markdown("#### 예약된 파이프라인 작업")
     col_j1, col_j2 = st.columns(2)
@@ -278,10 +329,22 @@ with tab_monitor:
     col_b1, col_b2 = st.columns(2)
     with col_b1:
         if st.button("📰 뉴스 수집 지금 실행", use_container_width=True, type="primary"):
-            st.warning("⚠️ PostgreSQL 서버 연결 후 사용 가능합니다.\n\n`pip install postgresql` 또는 Docker로 실행해주세요.")
+            if is_live:
+                with st.spinner("뉴스 파이프라인 가동 중..."):
+                    job_fetch_news()
+                st.success("뉴스 수집 및 분석이 완료되었습니다.")
+                st.rerun()
+            else:
+                st.warning("⚠️ PostgreSQL 서버 연결 후 사용 가능합니다.")
     with col_b2:
         if st.button("🎬 영상 수집 지금 실행", use_container_width=True):
-            st.warning("⚠️ DB 연결 후 사용 가능합니다.")
+            if is_live:
+                with st.spinner("영상 파이프라인 가동 중..."):
+                    job_fetch_videos()
+                st.success("영상 수집 및 분석이 완료되었습니다.")
+                st.rerun()
+            else:
+                st.warning("⚠️ DB 연결 후 사용 가능합니다.")
 
     # 실시간 로그 (데모)
     with st.expander("📜 파이프라인 로그 (데모)", expanded=False):
@@ -315,7 +378,7 @@ with tab_briefing:
 
     st.markdown("---")
 
-    filtered = [a for a in DEMO_ARTICLES
+    filtered = [a for a in articles
                 if a["sentiment"] in sentiment_filter and a["importance"] >= min_importance]
     filtered.sort(key=lambda x: x["importance"], reverse=True)
 
@@ -356,19 +419,35 @@ with tab_graph:
     with col_g2:
         st.markdown("**엔티티 현황**")
         type_colors = {"company": "🏢", "technology": "⚙️", "institution": "🎓", "product": "📦"}
-        for name, etype in DEMO_GRAPH_NODES:
-            icon = type_colors.get(etype, "🔵")
-            st.markdown(f"<div style='font-size:0.82rem;padding:3px 0;color:#e2e8f0'>{icon} {name}</div>", unsafe_allow_html=True)
+        
+        if is_live:
+            db_entities = get_all_entities_for_graph()
+            if db_entities:
+                for name, etype in db_entities[:15]:  # 상위 15개만 표시
+                    icon = type_colors.get(etype, "🔵")
+                    st.markdown(f"<div style='font-size:0.82rem;padding:3px 0;color:#e2e8f0'>{icon} {name}</div>", unsafe_allow_html=True)
+            else:
+                st.caption("데이터 없음")
+        else:
+            for name, etype in DEMO_GRAPH_NODES:
+                icon = type_colors.get(etype, "🔵")
+                st.markdown(f"<div style='font-size:0.82rem;padding:3px 0;color:#e2e8f0'>{icon} {name}</div>", unsafe_allow_html=True)
 
     with col_g1:
-        G = nx.DiGraph()
-        color_map = {"company": "#63b3ed", "technology": "#68d391", "institution": "#f6ad55", "product": "#9f7aea"}
-        for name, etype in DEMO_GRAPH_NODES:
-            G.add_node(name, type=etype, color=color_map.get(etype, "#fff"))
-        for src, tgt, label in DEMO_GRAPH_EDGES:
-            G.add_edge(src, tgt, label=label)
+        if is_live:
+            G = get_graph()
+        else:
+            G = nx.DiGraph()
+            for name, etype in DEMO_GRAPH_NODES:
+                G.add_node(name, type=etype, color="#63b3ed")
+            for src, tgt, label in DEMO_GRAPH_EDGES:
+                G.add_edge(src, tgt, label=label)
 
-        pos = nx.spring_layout(G, k=3.5, seed=42)
+        if G.number_of_nodes() == 0:
+            st.info("그래프 데이터가 없습니다.")
+        else:
+            color_map = {"company": "#63b3ed", "technology": "#68d391", "institution": "#f6ad55", "product": "#9f7aea", "unknown": "#718096"}
+            pos = nx.spring_layout(G, k=3.5, seed=42)
 
         edge_traces = []
         for (u, v, d) in G.edges(data=True):
@@ -456,18 +535,26 @@ with tab_chat:
         answer = None
         try:
             from openai import OpenAI as OA
-            client = OA(base_url="http://localhost:1234/v1", api_key="lm-studio")
-            context = "\n\n".join([f"[{a['source']}] {a['title']}\n{a['summary']}" for a in DEMO_ARTICLES[:3]])
+            client = OA(base_url=os.getenv("LMS_API_BASE", "http://localhost:1234/v1"), api_key="lm-studio")
+            
+            # RAG (의미론적 검색)
+            if is_live:
+                search_results = semantic_search(user_input, top_k=5)
+                context = "\n\n".join([f"[{r['source']}] {r['title']}\n{r['summary']}" for r in search_results])
+            else:
+                context = "\n\n".join([f"[{a['source']}] {a['title']}\n{a['summary']}" for a in DEMO_ARTICLES[:3]])
+                
             resp = client.chat.completions.create(
-                model="gemma-4-26b",
+                model=LMS_MODEL_NAME,
                 messages=[
                     {"role": "system", "content": "홈로봇 산업 전문 분석가입니다. 주어진 문서 기반으로 한국어로 답변하세요."},
                     {"role": "user", "content": f"참조 문서:\n{context}\n\n질문: {user_input}"},
                 ],
-                temperature=0.3, max_tokens=512,
+                temperature=0.3, max_tokens=1024,
             )
             answer = resp.choices[0].message.content
-        except Exception:
+        except Exception as e:
+            logger.error(f"채팅 응답 실패: {e}")
             answer = DEMO_RESPONSES["default"]
 
         st.session_state.chat_history.append({"role": "assistant", "content": answer})
