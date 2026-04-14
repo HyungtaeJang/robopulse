@@ -12,6 +12,7 @@ from typing import Literal, Optional
 
 from dotenv import load_dotenv
 from jinja2 import Environment, FileSystemLoader
+import httpx
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
@@ -28,7 +29,13 @@ _client: OpenAI | None = None
 def _get_client() -> OpenAI:
     global _client
     if _client is None:
-        _client = OpenAI(base_url=LMS_BASE_URL, api_key="lm-studio")
+        # 기업 보안망 프록시 우회 설정
+        http_client = httpx.Client(proxy=None, trust_env=False)
+        _client = OpenAI(
+            base_url=LMS_BASE_URL, 
+            api_key="lm-studio",
+            http_client=http_client
+        )
     return _client
 
 
