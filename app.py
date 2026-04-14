@@ -151,53 +151,58 @@ else:
 
 # ---- 사이드바 -----------------------------------------------
 with st.sidebar:
-    st.markdown('<p class="hero-title" style="font-size:1.6rem">RoboPulse</p>', unsafe_allow_html=True)
+    st.markdown('<p class="hero-title" style="font-size:2rem; margin-top:-20px; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">RoboPulse</p>', unsafe_allow_html=True)
+    st.markdown('<p style="font-size:0.8rem; color:#64748b; font-weight:600; margin-bottom:15px; margin-top:-5px; letter-spacing:1px;">INTELLIGENCE ENGINE</p>', unsafe_allow_html=True)
+    
     if is_live:
         st.markdown('<div class="mode-badge" style="background:#dcfce7; color:#166534">Live Mode</div>', unsafe_allow_html=True)
     else:
         st.markdown('<div class="mode-badge" style="background:#f1f5f9; color:#64748b">Demo Mode</div>', unsafe_allow_html=True)
     
     st.markdown("---")
-    st.markdown("**시스템 상태**")
+    
+    # 1. 시스템 상태 (Expander + Status Dot)
     sched_running = any(j for j in scheduler_jobs)
-    if sched_running:
-        st.success("실시간 자동화 가동 중")
-        st.markdown('<p style="font-size:0.8rem; font-weight:600; color:#475569; margin-top:10px; margin-bottom:5px;">향후 실행 일정</p>', unsafe_allow_html=True)
-        
-        # 작업명 맵핑 (UI 간소화)
-        job_map = {
-            "news_pipeline": "뉴스 수집",
-            "video_pipeline": "영상 수집",
-            "analysis_pipeline": "심층 분석"
-        }
-        
-        for job in scheduler_jobs:
-            name = job_map.get(job['id'], job['name'])
+    sys_dot = "🟢" if sched_running else "🔴"
+    
+    with st.expander(f"시스템 상태 &nbsp;&nbsp;{sys_dot}", expanded=not sched_running):
+        if sched_running:
+            st.markdown('<p style="font-size:0.8rem; font-weight:600; color:#475569; margin-top:5px; margin-bottom:5px;">향후 실행 일정</p>', unsafe_allow_html=True)
+            
+            job_map = {
+                "news_pipeline": "뉴스 수집",
+                "video_pipeline": "영상 수집",
+                "analysis_pipeline": "심층 분석"
+            }
+            
+            for job in scheduler_jobs:
+                name = job_map.get(job['id'], job['name'])
+                st.markdown(f"""
+                <div style="display:flex; justify-content:space-between; font-size:0.8rem; padding:2px 0; color:#1e293b;">
+                    <span>{name}</span>
+                    <span style="font-weight:600; color:#4338ca;">{job['next_run']}</span>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("수집이 중단되었습니다. 실시간 정보를 위해 자동화를 시작하세요.")
+            if st.button("자동화 시작", use_container_width=True, type="primary"):
+                start_scheduler()
+                st.rerun()
+
+    # 2. 연결 상태 (Expander + Status Dot)
+    all_connected = all(conn_status.values())
+    conn_dot = "🟢" if all_connected else "🔴"
+    
+    with st.expander(f"연결 상태 &nbsp;&nbsp;{conn_dot}", expanded=not all_connected):
+        def status_row(label, connected):
+            color = "#22c55e" if connected else "#ef4444"
+            icon_svg = f'<svg width="10" height="10"><circle cx="5" cy="5" r="5" fill="{color}" /></svg>'
             st.markdown(f"""
-            <div style="display:flex; justify-content:space-between; font-size:0.85rem; padding:2px 0; color:#1e293b;">
-                <span>{name}</span>
-                <span style="font-weight:600; color:#4338ca;">{job['next_run']}</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0;">
+                <span style="color:#475569; font-size:0.85rem;">{label}</span>
+                {icon_svg}
             </div>
             """, unsafe_allow_html=True)
-    else:
-        st.info("수집이 중단되었습니다. 자동화를 시작하여 실시간 정보를 받아보세요.")
-        if st.button("자동화 시작", use_container_width=True, type="primary"):
-            start_scheduler()
-            st.rerun()
-
-    st.markdown("")
-    st.markdown("**연결 상태**")
-    
-    def status_row(label, connected):
-        color = "#22c55e" if connected else "#ef4444"
-        icon_svg = f'<svg width="10" height="10"><circle cx="5" cy="5" r="5" fill="{color}" /></svg>'
-        st.markdown(f"""
-        <div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0;">
-            <span style="color:#475569">{label}</span>
-            {icon_svg}
-        </div>
-        """, unsafe_allow_html=True)
-
     status_row("PostgreSQL", conn_status["postgres"])
     status_row("Redis", conn_status["redis"])
     status_row("Local LLM", conn_status["lms"])

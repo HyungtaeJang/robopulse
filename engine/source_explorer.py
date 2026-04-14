@@ -27,13 +27,13 @@ def discover_sources():
     logger.info("🔍 [AI 자율 탐색] 신규 데이터 소스 발굴 시작...")
     start_time = datetime.now()
 
-    # 1. 대상 키워드 추출 (가장 많이 언급된 기업/기술 상위 3개)
+    # 1. 대상 키워드 추출 (가중치 부여)
     stats = get_entity_stats()
     target_entities = [e["name"] for e in stats if e["type"] in ("company", "technology")][:3]
     
     if not target_entities:
-        logger.info("탐색할 주요 엔티티가 충분하지 않습니다. 기본값 사용.")
-        target_entities = ["Figure AI", "Boston Dynamics", "1X Technologies"]
+        logger.info("탐색할 주요 엔티티가 충분하지 않습니다. 홈로봇 핵심 타겟 사용.")
+        target_entities = ["Figure AI", "Tesla Optimus", "Unitree Robotics", "1X Technologies", "Apptronik"]
 
     logger.info(f"선정된 탐색 타겟: {target_entities}")
 
@@ -41,10 +41,9 @@ def discover_sources():
     client = get_lms_client()
 
     for entity in target_entities:
-        # 뉴스/블로그용 탐색
-        rss_query = f"{entity} robotics official news rss OR blog"
-        # 유튜브용 탐색
-        yt_query = f"{entity} official youtube channel robotics"
+        # 홈로봇/휴머노이드 전문성을 위한 쿼리 파라미터 강화
+        rss_query = f"{entity} humanoid home robotics official news rss OR blog"
+        yt_query = f"{entity} humanoid official youtube channel robotics domestic"
 
         for query, search_type in [(rss_query, "news"), (yt_query, "youtube")]:
             try:

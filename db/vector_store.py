@@ -442,10 +442,10 @@ def init_news_sources():
         count = session.execute(text("SELECT count(*) FROM news_sources")).scalar()
         if count == 0:
             initial_sources = [
-                ("ieee_spectrum", "https://spectrum.ieee.org/feeds/topic/robotics.rss", "IEEE Spectrum - Robotics"),
-                ("the_robot_report", "https://www.therobotreport.com/feed/", "The Robot Report"),
+                ("ieee_humanoids", "https://spectrum.ieee.org/feeds/topic/humanoid-robots.rss", "IEEE Spectrum - Humanoids"),
+                ("robot_report_mobile", "https://www.therobotreport.com/category/robotics-topics/mobile-robots/feed/", "The Robot Report - Mobile"),
                 ("techcrunch_robotics", "https://techcrunch.com/category/robotics/feed/", "TechCrunch - Robotics"),
-                ("wired_robots", "https://www.wired.com/tag/robots/rss", "Wired - Robots"),
+                ("the_robot_report", "https://www.therobotreport.com/feed/", "The Robot Report"),
                 ("mit_news_robotics", "https://news.mit.edu/topic/robotics/rss", "MIT News - Robotics")
             ]
             for name, url, label in initial_sources:
