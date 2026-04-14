@@ -203,12 +203,12 @@ with st.sidebar:
                 {icon_svg}
             </div>
             """, unsafe_allow_html=True)
-    status_row("PostgreSQL", conn_status["postgres"])
-    status_row("Redis", conn_status["redis"])
-    status_row("Local LLM", conn_status["lms"])
-    
-    if is_live and not conn_status["lms"]:
-        st.warning("LM Studio 연결 확인 필요 (CORS/Server)")
+        status_row("PostgreSQL", conn_status["postgres"])
+        status_row("Redis", conn_status["redis"])
+        status_row("Local LLM", conn_status["lms"])
+        
+        if is_live and not conn_status["lms"]:
+            st.warning("Local LLM 연결 확인 필요")
 
     st.markdown("---")
     st.caption(f"Model: {LMS_MODEL_NAME.split('/')[-1]}")
