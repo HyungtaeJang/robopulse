@@ -203,10 +203,12 @@ def get_scheduler_status() -> list[dict]:
         return []
     jobs = []
     for job in _scheduler.get_jobs():
+        # 다음 실행 시각을 HH:mm 형식으로 포맷팅
+        next_run_str = job.next_run_time.strftime("%H:%M") if job.next_run_time else "대기 중"
         jobs.append({
             "id": job.id,
             "name": job.name,
-            "next_run": str(job.next_run_time),
+            "next_run": next_run_str,
         })
     return jobs
 

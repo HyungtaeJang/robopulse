@@ -161,10 +161,27 @@ with st.sidebar:
     st.markdown("**시스템 상태**")
     sched_running = any(j for j in scheduler_jobs)
     if sched_running:
-        st.success("파이프라인 가동 중")
+        st.success("실시간 자동화 가동 중")
+        st.markdown('<p style="font-size:0.8rem; font-weight:600; color:#475569; margin-top:10px; margin-bottom:5px;">향후 실행 일정</p>', unsafe_allow_html=True)
+        
+        # 작업명 맵핑 (UI 간소화)
+        job_map = {
+            "news_pipeline": "뉴스 수집",
+            "video_pipeline": "영상 수집",
+            "analysis_pipeline": "심층 분석"
+        }
+        
+        for job in scheduler_jobs:
+            name = job_map.get(job['id'], job['name'])
+            st.markdown(f"""
+            <div style="display:flex; justify-content:space-between; font-size:0.85rem; padding:2px 0; color:#1e293b;">
+                <span>{name}</span>
+                <span style="font-weight:600; color:#4338ca;">{job['next_run']}</span>
+            </div>
+            """, unsafe_allow_html=True)
     else:
-        st.info("스케줄러 대기 중")
-        if st.button("자동화 시작", use_container_width=True):
+        st.info("수집이 중단되었습니다. 자동화를 시작하여 실시간 정보를 받아보세요.")
+        if st.button("자동화 시작", use_container_width=True, type="primary"):
             start_scheduler()
             st.rerun()
 
@@ -182,8 +199,8 @@ with st.sidebar:
         """, unsafe_allow_html=True)
 
     status_row("PostgreSQL", conn_status["postgres"])
-    status_row("Redis (Queue)", conn_status["redis"])
-    status_row("LM Studio (AI)", conn_status["lms"])
+    status_row("Redis", conn_status["redis"])
+    status_row("Local LLM", conn_status["lms"])
     
     if is_live and not conn_status["lms"]:
         st.warning("LM Studio 연결 확인 필요 (CORS/Server)")
@@ -265,12 +282,12 @@ with tab_monitor:
 # Tab 5: 설정 및 제어
 # Tab 5: 설정 및 제어
 with tab_settings:
-    st.markdown("### 🛠️ 시스템 구성 및 관리")
-    sub_tab_sources, sub_tab_system = st.tabs(["📡 수집 소스 관리", "⚙️ 시스템 제어"])
+    st.markdown("### 설정 및 제어")
+    sub_tab_sources, sub_tab_system = st.tabs(["수집 소스 관리", "시스템 제어"])
     
     # --- 서브 탭 1: 수집 소스 관리 ---
     with sub_tab_sources:
-        st.markdown("#### 📰 데이터 수집 루트 (RSS)")
+        st.markdown("#### 데이터 수집 루트 (RSS)")
         st.caption("시스템이 정기적으로 방문하여 로봇 뉴스를 수집할 사이트 목록입니다.")
         
         # 소스 추가 폼
@@ -305,7 +322,7 @@ with tab_settings:
                         st.rerun()
                 st.markdown("---")
         
-        st.markdown("#### 📺 유튜브 채널 관리")
+        st.markdown("#### 유튜브 채널 관리")
         st.caption("AI가 영상을 시청하고 자막을 분석할 공식 유튜브 채널 목록입니다.")
         
         with st.expander("➕ 신규 유튜브 채널 추가", expanded=False):
@@ -338,7 +355,7 @@ with tab_settings:
                         st.rerun()
                 st.markdown("---")
 
-        st.markdown("#### 🤖 AI 자율 탐색 추천함")
+        st.markdown("#### AI 기반 소스 추천")
         st.caption("로컬 LLM이 검색 엔진을 통해 유망한 로봇/기술 기업의 채널이나 RSS를 추천합니다.")
         st.info("💡 **알림**: 이미 수집 중이거나 이전에 거절된 URL은 중복 추천되지 않습니다.")
         
@@ -378,7 +395,7 @@ with tab_settings:
 
     # --- 서브 탭 2: 시스템 제어 ---
     with sub_tab_system:
-        st.markdown("#### 🌙 야간 AI 심층 분석 스케줄링")
+        st.markdown("#### AI 심층 분석 스케줄링")
         st.caption("서버 부하가 적은 시간에 대규모 AI 분석(요약, 지식그래프 구성)을 일괄 수행합니다.")
         
         current_analysis_hour = int(os.getenv("ANALYSIS_CRON_HOUR", "2"))
@@ -403,10 +420,10 @@ with tab_settings:
         
         st.markdown("<br><br>", unsafe_allow_html=True)
         st.markdown('<div style="background-color: #fff1f2; padding: 20px; border-radius: 10px; border: 1px solid #fda4af;">', unsafe_allow_html=True)
-        st.markdown("<h4 style='color: #be123c; margin-top: 0;'>⚠️ 위험 구역 (Danger Zone)</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color: #be123c; margin-top: 0;'>데이터 초기화</h4>", unsafe_allow_html=True)
         st.markdown("<p style='color: #9f1239; font-size: 0.9rem;'>초기화 시 모든 기사와 지식 그래프 데이터가 영구 삭제됩니다.</p>", unsafe_allow_html=True)
         
-        if st.button("🔥 전체 데이터 초기화", type="primary", use_container_width=False):
+        if st.button("전체 데이터 초기화", type="primary", use_container_width=False):
             if is_live:
                 with st.spinner("시스템 초기화 중..."):
                     clear_all_data(reset_sources=True)
