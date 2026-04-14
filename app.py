@@ -288,9 +288,9 @@ tab_monitor, tab_briefing, tab_graph, tab_chat, tab_settings = st.tabs([
     "데이터 수집 자동화 모니터링", "AI 브리핑", "지식 그래프", "AI Chat", "설정 및 제어"
 ])
 
-# Tab 1: 모니터링
+# Tab 1: 데이터 수집 자동화 모니터링
 with tab_monitor:
-    st.info("지정된 RSS 소스나 유튜브 채널에서 실시간으로 관련 데이터를 수집합니다.")
+    st.info("수집 단계: 지정된 RSS 소스나 유튜브 채널에서 실시간으로 관련 데이터를 수집합니다.")
     c1, c2, c3, c4 = st.columns(4)
     for col, (label, val, unit) in zip([c1, c2, c3, c4], [
         ("오늘 수집", stats["today_total"], "건"),
@@ -434,7 +434,7 @@ with tab_settings:
 
         st.markdown("#### AI 기반 소스 추천")
         st.caption("로컬 LLM이 검색 엔진을 통해 유망한 로봇/기술 기업의 채널이나 RSS를 추천합니다.")
-        st.info("💡 **알림**: 이미 수집 중이거나 이전에 거절된 URL은 중복 추천되지 않습니다.")
+        st.info("이미 수집 중이거나 이전에 거절된 URL은 중복 추천되지 않습니다.")
         
         col_a1, col_a2 = st.columns([8, 2])
         with col_a2:
@@ -484,7 +484,7 @@ with tab_settings:
 
     # --- 서브 탭 2: 시스템 제어 ---
     with sub_tab_system:
-        st.markdown("#### AI 심층 분석 스케줄링")
+        st.markdown("#### AI 분석 스케줄링")
         st.caption("서버 부하가 적은 시간에 대규모 AI 분석(요약, 지식그래프 구성)을 일괄 수행합니다.")
         
         current_analysis_hour = int(os.getenv("ANALYSIS_CRON_HOUR", "2"))
@@ -502,7 +502,7 @@ with tab_settings:
         st.selectbox(
             "분석 시작 시간 (0~23시)", 
             options=list(range(24)), 
-            format_func=lambda x: f"매일 {x:02d}시 30분",
+            format_func=lambda x: f"매일 {x:04d}시 30분",
             key="analysis_hour",
             on_change=on_hour_change
         )
@@ -524,9 +524,9 @@ with tab_settings:
                 st.error("DB가 연결되지 않았습니다.")
         st.markdown('</div>', unsafe_allow_html=True)
 
-# Tab 2: 인텔리전스 브리핑
+# Tab 2: AI 브리핑
 with tab_briefing:
-    st.info("💡 **심층 분석**: Gemma 4 모델이 각 소스의 중요도를 평가하고 3줄 핵심 요약을 제공하는 인텔리전스 보고서입니다.")
+    st.info("심층 분석: Gemma 4 모델이 각 소스의 중요도를 평가하고 3줄 핵심 요약을 제공하는 인텔리전스 보고서입니다.")
     col_f1, col_f2 = st.columns([2, 2])
     with col_f1: 
         sentiment_options = {"positive": "긍정", "neutral": "중립", "negative": "부정"}
@@ -569,7 +569,7 @@ with tab_briefing:
 
 # Tab 3: 지식 그래프
 with tab_graph:
-    st.info("💡 **추출 단계**: 뉴스 본문에서 기업, 기술, 관계를 추출하여 산업 지형도를 시각화합니다.")
+    st.info("추출 단계: 뉴스 본문에서 기업, 기술, 관계를 추출하여 산업 지형도를 시각화합니다.")
     
     col_g1, col_g2 = st.columns([3, 1])
     
@@ -671,9 +671,9 @@ with tab_graph:
                                           height=600, plot_bgcolor='white'))
             st.plotly_chart(fig, use_container_width=True)
 
-# Tab 4: AI 챗봇
+# Tab 4: AI Chat
 with tab_chat:
-    st.info("💡 **활용 단계**: 수집된 최신 지식을 바탕으로 AI 분석가와 대화하며 인사이트를 얻습니다.")
+    st.info("활용 단계: 수집된 최신 지식을 바탕으로 AI 분석가와 대화하며 인사이트를 얻습니다.")
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = [{"role": "assistant", "content": "로봇 산업에 대해 질문해 주세요."}]
 
