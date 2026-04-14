@@ -140,7 +140,8 @@ def fetch_channel(channel: dict) -> tuple[int, int, int]:
         subtitle = _download_subtitle(video_id)
         if not subtitle:
             logger.warning(f"자막 없음, 설명란으로 대체: {video_id}")
-            subtitle = video.get("description", "")[:4000]
+            # description이 None일 경우를 대비해 'or ""' 추가
+            subtitle = (video.get("description") or "")[:4000]
 
         # 발행일 파싱
         upload_date = video.get("upload_date", "")
