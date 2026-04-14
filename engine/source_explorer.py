@@ -47,16 +47,20 @@ def discover_sources():
                 results = []
                 # 반복 요청 시 IP 블록/RateLimit(202) 방지를 위해 지연 시간 추가
                 time.sleep(2)
-                with DDGS() as ddgs:
-                    try:
-                        # html 백엔드가 좀 더 안정적임
+                # html 백엔드가 좀 더 안정적임
+                try:
+                    with DDGS() as ddgs:
                         for r in ddgs.text(query, backend="html", max_results=3):
                             results.append(r)
-                    except Exception:
-                        # 실패 시 lite 백엔드 폴백
-                        time.sleep(2)
-                        for r in ddgs.text(query, backend="lite", max_results=3):
-                            results.append(r)
+                except Exception:
+                    # 실패 시 독립된 세션으로 lite 폴백
+                    time.sleep(2)
+                    try:
+                        with DDGS() as ddgs2:
+                            for r in ddgs2.text(query, backend="lite", max_results=3):
+                                results.append(r)
+                    except Exception as e2:
+                        logger.warning(f"Lite 백엔드 재시도 실패: {e2}")
                 
                 if not results:
                     continue
