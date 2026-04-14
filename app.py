@@ -17,10 +17,13 @@ try:
         check_all_connections, get_pipeline_stats, get_latest_articles, 
         clear_all_data, get_all_relations, get_all_entities_for_graph,
         init_news_sources, get_news_sources, add_news_source, toggle_news_source, delete_news_source,
-        get_youtube_sources, get_recommended_sources, get_lms_client, semantic_search
+        get_youtube_sources, add_youtube_source, toggle_youtube_source, delete_youtube_source,
+        get_recommended_sources, update_recommended_source_status,
+        get_lms_client, semantic_search
     )
     from scheduler.pipeline_scheduler import (
-        start_scheduler, get_scheduler_status, job_fetch_news, job_fetch_videos, job_analyze_unprocessed
+        start_scheduler, get_scheduler_status, job_fetch_news, job_fetch_videos, 
+        job_analyze_unprocessed, update_analysis_schedule
     )
     from engine.graph_builder import get_graph, rebuild_from_db, get_entity_stats
     is_live = True
@@ -187,7 +190,6 @@ with st.sidebar:
 
     st.markdown("---")
     st.caption(f"Model: {LMS_MODEL_NAME.split('/')[-1]}")
-    st.caption("Local Gemma 4 Engine")
 
 # ---- 메인 헤더 ----------------------------------------------
 col_h1, col_h2 = st.columns([8, 2])
@@ -261,156 +263,159 @@ with tab_monitor:
         else:
             st.code("[10:00:01] 뉴스 수집 시작...\n[10:02:15] 분석 완료 및 DB 저장", language="text")
 # Tab 5: 설정 및 제어
+# Tab 5: 설정 및 제어
 with tab_settings:
-    st.markdown("### 데이터 수집 루트(RSS) 관리")
-    st.caption("시스템이 정기적으로 방문하여 로봇 뉴스를 수집할 사이트 목록입니다.")
+    st.markdown("### 🛠️ 시스템 구성 및 관리")
+    sub_tab_sources, sub_tab_system = st.tabs(["📡 수집 소스 관리", "⚙️ 시스템 제어"])
     
-    # 소스 추가 폼
-    with st.expander("신규 수집 소스 추가", expanded=False):
-        with st.form("add_source_form"):
-            new_label = st.text_input("사이트 이름", placeholder="예: Robotics Business Review")
-            new_url = st.text_input("RSS 피드 URL", placeholder="https://example.com/feed")
-            new_name = "".join(filter(str.isalnum, new_label.lower())).replace(" ", "_")
-            if st.form_submit_button("소스 등록"):
-                if new_label and new_url:
-                    add_news_source(new_name, new_url, new_label)
-                    st.success(f"'{new_label}' 소스가 등록되었습니다.")
-                    st.rerun()
-                else:
-                    st.error("이름과 URL을 모두 입력해주세요.")
-
-    # 소스 목록 표시
-    sources = get_news_sources()
-    if sources:
-        for src in sources:
-            sc1, sc2, sc3, sc4 = st.columns([3, 4, 1, 1])
-            with sc1: st.write(f"**{src['label']}**")
-            with sc2: st.caption(src['url'])
-            with sc3:
-                is_active = st.toggle("활성", value=src['is_active'], key=f"tog_{src['id']}")
-                if is_active != src['is_active']:
-                    toggle_news_source(src['id'], is_active)
-                    st.rerun()
-            with sc4:
-                if st.button("삭제", key=f"del_{src['id']}", type="secondary"):
-                    delete_news_source(src['id'])
-                    st.rerun()
-            st.markdown("---")
-            
-    st.markdown("### 유튜브 채널 수집 루트 관리")
-    st.caption("AI가 영상을 시청하고 자막을 분석할 공식 유튜브 채널 목록입니다.")
-    
-    with st.expander("신규 유튜브 채널 추가", expanded=False):
-        with st.form("add_yt_form"):
-            yt_label = st.text_input("채널 이름", placeholder="예: Figure AI")
-            yt_url = st.text_input("채널 홈 URL", placeholder="https://www.youtube.com/@FigureAI")
-            yt_name = "youtube_" + "".join(filter(str.isalnum, yt_label.lower())).replace(" ", "_")
-            if st.form_submit_button("채널 등록"):
-                if yt_label and yt_url:
-                    from db.vector_store import add_youtube_source
-                    add_youtube_source(yt_name, yt_url, yt_label)
-                    st.success(f"'{yt_label}' 채널이 등록되었습니다.")
-                    st.rerun()
-                else:
-                    st.error("이름과 URL을 모두 입력해주세요.")
-
-    yt_sources = get_youtube_sources() if is_live else []
-    if yt_sources:
-        for src in yt_sources:
-            sc1, sc2, sc3, sc4 = st.columns([3, 4, 1, 1])
-            with sc1: st.write(f"**{src['label']}**")
-            with sc2: st.caption(src['channel_url'])
-            with sc3:
-                is_active = st.toggle("활성", value=src['is_active'], key=f"yt_tog_{src['id']}")
-                if is_active != src['is_active']:
-                    from db.vector_store import toggle_youtube_source
-                    toggle_youtube_source(src['id'], is_active)
-                    st.rerun()
-            with sc4:
-                if st.button("삭제", key=f"yt_del_{src['id']}", type="secondary"):
-                    from db.vector_store import delete_youtube_source
-                    delete_youtube_source(src['id'])
-                    st.rerun()
-            st.markdown("---")
-
-    st.markdown("### 🤖 AI 자율 탐색 추천함")
-    st.caption("로컬 LLM이 검색 엔진을 통해 유망한 로봇/기술 기업의 채널이나 RSS를 추천합니다.")
-    
-    col_a1, col_a2 = st.columns([8, 2])
-    with col_a2:
-        if st.button("새 소스 탐색하기", help="DB의 최신 엔티티를 활용해 백그라운드 탐색을 시작합니다."):
-            with st.spinner("DuckDuckGo 쿼리 및 Gemma 검증 중... (최대 1~2분 소요)"):
-                from engine.source_explorer import discover_sources
-                discover_sources()
-            st.success("자율 탐색이 완료되었습니다.")
-            st.rerun()
-            
-    rec_sources = get_recommended_sources() if is_live else []
-    if not rec_sources:
-        st.info("현재 대기 중인 추천 소스가 없습니다.")
-    else:
-        for rec in rec_sources:
-            st.markdown(f"**{rec['label']}** (`{rec['source_type']}`)")
-            st.caption(f"추천 사유: {rec['reason']} | 링크: {rec['url']}")
-            bt1, bt2, _, _ = st.columns([2, 2, 6, 1])
-            with bt1:
-                if st.button("✅ 승인", key=f"rec_ok_{rec['id']}", type="primary"):
-                    from db.vector_store import update_recommended_source_status, add_news_source, add_youtube_source
-                    update_recommended_source_status(rec['id'], "approved")
-                    new_name = "".join(filter(str.isalnum, rec['label'].lower())).replace(" ", "_")
-                    if rec['source_type'] == 'youtube':
-                        add_youtube_source("youtube_" + new_name, rec['url'], rec['label'])
-                    else:
-                        add_news_source(new_name, rec['url'], rec['label'])
-                    st.toast(f"{rec['label']} 등록 완료!")
-                    st.rerun()
-            with bt2:
-                if st.button("거절", key=f"rec_no_{rec['id']}"):
-                    from db.vector_store import update_recommended_source_status
-                    update_recommended_source_status(rec['id'], "rejected")
-                    st.rerun()
-            st.markdown("---")
-    st.markdown("### 야간 AI 심층 분석 스케줄링")
-    st.caption("새벽 시간에 몰아서 무거운 AI 분석(모델 추론, 번역, 지식그래프 구성)을 수행하는 시간대입니다.")
-    
-    current_analysis_hour = int(os.getenv("ANALYSIS_CRON_HOUR", "2"))
-    
-    if "analysis_hour" not in st.session_state:
-        st.session_state.analysis_hour = current_analysis_hour
+    # --- 서브 탭 1: 수집 소스 관리 ---
+    with sub_tab_sources:
+        st.markdown("#### 📰 데이터 수집 루트 (RSS)")
+        st.caption("시스템이 정기적으로 방문하여 로봇 뉴스를 수집할 사이트 목록입니다.")
         
-    def on_hour_change():
-        from scheduler.pipeline_scheduler import update_analysis_schedule
-        new_hr = st.session_state.analysis_hour
-        success = update_analysis_schedule(new_hr)
-        if success:
-            st.toast(f"✅ AI 분석 스케줄이 '매일 새벽 {new_hr:02d}:30'으로 변경되었습니다.")
-        else:
-            st.toast("⚠️ 스케줄러가 아직 활성화되지 않았습니다.", icon="⚠️")
+        # 소스 추가 폼
+        with st.expander("➕ 신규 수집 소스 추가", expanded=False):
+            with st.form("add_source_form"):
+                new_label = st.text_input("사이트 이름", placeholder="예: Robotics Business Review")
+                new_url = st.text_input("RSS 피드 URL", placeholder="https://example.com/feed")
+                new_name = "".join(filter(str.isalnum, new_label.lower())).replace(" ", "_")
+                if st.form_submit_button("소스 등록"):
+                    if new_label and new_url:
+                        add_news_source(new_name, new_url, new_label)
+                        st.success(f"'{new_label}' 소스가 등록되었습니다.")
+                        st.rerun()
+                    else:
+                        st.error("이름과 URL을 모두 입력해주세요.")
 
-    st.selectbox(
-        "분석 시작 시간 (0~23시)", 
-        options=list(range(24)), 
-        format_func=lambda x: f"매일 {x:02d}시 30분",
-        key="analysis_hour",
-        on_change=on_hour_change
-    )
-    st.markdown("---")
-    
-    st.markdown("### 시스템 초기화")
-    st.warning("주의: 초기화 시 수집된 모든 기사와 분석 데이터가 영구적으로 삭제됩니다.")
-    
-    reset_col1, reset_col2 = st.columns([2, 8])
-    with reset_col1:
-        if st.button("전체 데이터 초기화", type="primary", use_container_width=True):
+        # 소스 목록 표시
+        sources = get_news_sources()
+        if sources:
+            for src in sources:
+                sc1, sc2, sc3, sc4 = st.columns([3, 4, 1, 1])
+                with sc1: st.write(f"**{src['label']}**")
+                with sc2: st.caption(src['url'])
+                with sc3:
+                    is_active = st.toggle("활성", value=src['is_active'], key=f"tog_{src['id']}")
+                    if is_active != src['is_active']:
+                        toggle_news_source(src['id'], is_active)
+                        st.rerun()
+                with sc4:
+                    if st.button("삭제", key=f"del_{src['id']}", type="secondary"):
+                        delete_news_source(src['id'])
+                        st.rerun()
+                st.markdown("---")
+        
+        st.markdown("#### 📺 유튜브 채널 관리")
+        st.caption("AI가 영상을 시청하고 자막을 분석할 공식 유튜브 채널 목록입니다.")
+        
+        with st.expander("➕ 신규 유튜브 채널 추가", expanded=False):
+            with st.form("add_yt_form"):
+                yt_label = st.text_input("채널 이름", placeholder="예: Figure AI")
+                yt_url = st.text_input("채널 홈 URL", placeholder="https://www.youtube.com/@FigureAI")
+                yt_name = "youtube_" + "".join(filter(str.isalnum, yt_label.lower())).replace(" ", "_")
+                if st.form_submit_button("채널 등록"):
+                    if yt_label and yt_url:
+                        add_youtube_source(yt_name, yt_url, yt_label)
+                        st.success(f"'{yt_label}' 채널이 등록되었습니다.")
+                        st.rerun()
+                    else:
+                        st.error("이름과 URL을 모두 입력해주세요.")
+
+        yt_sources = get_youtube_sources() if is_live else []
+        if yt_sources:
+            for src in yt_sources:
+                sc1, sc2, sc3, sc4 = st.columns([3, 4, 1, 1])
+                with sc1: st.write(f"**{src['label']}**")
+                with sc2: st.caption(src['channel_url'])
+                with sc3:
+                    is_active = st.toggle("활성", value=src['is_active'], key=f"yt_tog_{src['id']}")
+                    if is_active != src['is_active']:
+                        toggle_youtube_source(src['id'], is_active)
+                        st.rerun()
+                with sc4:
+                    if st.button("삭제", key=f"yt_del_{src['id']}", type="secondary"):
+                        delete_youtube_source(src['id'])
+                        st.rerun()
+                st.markdown("---")
+
+        st.markdown("#### 🤖 AI 자율 탐색 추천함")
+        st.caption("로컬 LLM이 검색 엔진을 통해 유망한 로봇/기술 기업의 채널이나 RSS를 추천합니다.")
+        st.info("💡 **알림**: 이미 수집 중이거나 이전에 거절된 URL은 중복 추천되지 않습니다.")
+        
+        col_a1, col_a2 = st.columns([8, 2])
+        with col_a2:
+            if st.button("새 소스 탐색하기", help="DB의 최신 엔티티를 활용해 백그라운드 탐색을 시작합니다.", use_container_width=True):
+                with st.spinner("Gemma 4가 신규 소스를 탐색 중..."):
+                    from engine.source_explorer import discover_sources
+                    discover_sources()
+                st.success("자율 탐색 완료!")
+                st.rerun()
+                
+        rec_sources = get_recommended_sources() if is_live else []
+        if not rec_sources:
+            st.info("현재 대기 중인 추천 소스가 없습니다.")
+        else:
+            for rec in rec_sources:
+                st.markdown(f"**{rec['label']}** (`{rec['source_type']}`)")
+                st.caption(f"추천 사유: {rec['reason']} | 링크: {rec['url']}")
+                bt1, bt2, _, _ = st.columns([2, 2, 6, 1])
+                with bt1:
+                    if st.button("✅ 승인", key=f"rec_ok_{rec['id']}", type="primary", use_container_width=True):
+                        update_recommended_source_status(rec['id'], "approved")
+                        new_name = "".join(filter(str.isalnum, rec['label'].lower())).replace(" ", "_")
+                        if rec['source_type'] == 'youtube':
+                            add_youtube_source("youtube_" + new_name, rec['url'], rec['label'])
+                        else:
+                            add_news_source(new_name, rec['url'], rec['label'])
+                        st.toast(f"{rec['label']} 등록 완료!")
+                        st.rerun()
+                with bt2:
+                    if st.button("거절", key=f"rec_no_{rec['id']}", use_container_width=True):
+                        update_recommended_source_status(rec['id'], "rejected")
+                        st.rerun()
+                st.markdown("---")
+
+    # --- 서브 탭 2: 시스템 제어 ---
+    with sub_tab_system:
+        st.markdown("#### 🌙 야간 AI 심층 분석 스케줄링")
+        st.caption("서버 부하가 적은 시간에 대규모 AI 분석(요약, 지식그래프 구성)을 일괄 수행합니다.")
+        
+        current_analysis_hour = int(os.getenv("ANALYSIS_CRON_HOUR", "2"))
+        if "analysis_hour" not in st.session_state:
+            st.session_state.analysis_hour = current_analysis_hour
+            
+        def on_hour_change():
+            new_hr = st.session_state.analysis_hour
+            success = update_analysis_schedule(new_hr)
+            if success:
+                st.toast(f"✅ AI 분석 스케줄이 '매일 새벽 {new_hr:02d}:30'으로 변경되었습니다.")
+            else:
+                st.toast("⚠️ 스케줄러가 활성화되지 않았습니다.", icon="⚠️")
+
+        st.selectbox(
+            "분석 시작 시간 (0~23시)", 
+            options=list(range(24)), 
+            format_func=lambda x: f"매일 {x:02d}시 30분",
+            key="analysis_hour",
+            on_change=on_hour_change
+        )
+        
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.markdown('<div style="background-color: #fff1f2; padding: 20px; border-radius: 10px; border: 1px solid #fda4af;">', unsafe_allow_html=True)
+        st.markdown("<h4 style='color: #be123c; margin-top: 0;'>⚠️ 위험 구역 (Danger Zone)</h4>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #9f1239; font-size: 0.9rem;'>초기화 시 모든 기사와 지식 그래프 데이터가 영구 삭제됩니다.</p>", unsafe_allow_html=True)
+        
+        if st.button("🔥 전체 데이터 초기화", type="primary", use_container_width=False):
             if is_live:
                 with st.spinner("시스템 초기화 중..."):
                     clear_all_data(reset_sources=True)
-                st.toast("✅ 데이터베이스가 깨끗하게 비워졌습니다.", icon="🗑️")
+                st.toast("✅ 모든 데이터가 삭제되었습니다.")
                 import time
-                time.sleep(1) # 사용자가 메시지를 읽을 시간을 줍니다.
+                time.sleep(1)
                 st.rerun()
             else:
                 st.error("DB가 연결되지 않았습니다.")
+        st.markdown('</div>', unsafe_allow_html=True)
 
 # Tab 2: 인텔리전스 브리핑
 with tab_briefing:
