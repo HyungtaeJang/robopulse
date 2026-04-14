@@ -15,8 +15,8 @@ import networkx as nx
 try:
     from db.vector_store import (
         check_all_connections, get_pipeline_stats, get_latest_articles, 
-        get_all_articles, clear_all_data, 
-        get_news_sources, add_news_source, toggle_news_source, delete_news_source,
+        get_all_articles, clear_all_data, get_all_relations, get_all_entities_for_graph,
+        init_news_sources, get_news_sources, add_news_source, toggle_news_source, delete_news_source,
         get_youtube_sources, get_recommended_sources, get_lms_client
     )
     from scheduler.pipeline_scheduler import (
