@@ -151,6 +151,7 @@ html, body, [class*="css"] { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
 .article-summary { color: #475569; font-size: 0.9rem; margin: 0.6rem 0; line-height: 1.6; }
 .article-thumb { width: 140px; height: 90px; border-radius: 6px; object-fit: cover; border: 1px solid #e2e8f0; flex-shrink: 0; }
 .badge-importance { background: #fdf6b2; color: #723b13; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.8rem; }
+.tag-badge { background: #eff6ff; color: #1d4ed8; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; margin-right: 4px; border: 1px solid #dbeafe; }
 
 /* 상태 인디케이터 Dot */
 .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
@@ -378,10 +379,9 @@ with tab_monitor:
             st.info("상세 로그는 서버 터미널을 확인해 주세요.")
         else:
             st.code("[10:00:01] 뉴스 수집 시작...\n[10:02:15] 분석 완료 및 DB 저장", language="text")
-# Tab 5: 설정 및 제어
+
 # Tab 5: 설정 및 제어
 with tab_settings:
-    st.markdown("### 설정 및 제어")
     sub_tab_sources, sub_tab_system = st.tabs(["수집 소스 관리", "시스템 제어"])
     
     # --- 서브 탭 1: 수집 소스 관리 ---
@@ -588,6 +588,9 @@ with tab_briefing:
                             <span class="badge-importance">⭐ {importance:.1f}</span>
                         </div>
                         <p class="article-summary">{art.get('summary', '요약 정보가 없습니다.')}</p>
+                        <div style="margin-top: 8px; margin-bottom: 8px;">
+                            {''.join([f'<span class="tag-badge">{t}</span>' for t in art.get('tags', []) if t and t != 'None'])}
+                        </div>
                     </div>
                     <div class="article-meta" style="font-size: 0.8rem; color: #94a3b8; display: flex; justify-content: space-between;">
                         <span>🏢 {art.get('source')}</span>
