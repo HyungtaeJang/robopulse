@@ -35,30 +35,37 @@ class RawArticle:
     content: str = ""
     author: Optional[str] = None
     published_at: Optional[datetime] = None
+    thumbnail_url: Optional[str] = None
 
 
 # ---- 본문 추출 ---------------------------------------------
-def _extract_full_text(url: str) -> str:
-    """URL에서 본문 텍스트를 추출합니다 (BeautifulSoup4)."""
+def _extract_full_text_and_image(url: str) -> tuple[str, Optional[str]]:
+    """URL에서 본문 텍스트와 대표 이미지(og:image) URL을 추출합니다 (BeautifulSoup4)."""
     try:
         # requests -> httpx로 교체 및 프록시 설정 명시적 우회
         with httpx.Client(proxy=None, trust_env=False, timeout=10.0) as client:
             resp = client.get(url, headers={"User-Agent": "RoboPulse/1.0"})
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "lxml")
+            
+        # 대표 이미지(og:image) 추출
+        thumbnail_url = None
+        og_image = soup.find("meta", property="og:image")
+        if og_image:
+            thumbnail_url = og_image.get("content")
 
         # 주요 본문 태그 우선 탐색
         for selector in ["article", "main", ".post-content", ".article-body", "#content"]:
             container = soup.select_one(selector)
             if container:
-                return container.get_text(separator="\n", strip=True)[:8000]
+                return container.get_text(separator="\n", strip=True)[:8000], thumbnail_url
 
         # 폴백: body 전체
         body = soup.find("body")
-        return body.get_text(separator="\n", strip=True)[:8000] if body else ""
+        return (body.get_text(separator="\n", strip=True)[:8000] if body else ""), thumbnail_url
     except Exception as e:
-        logger.warning(f"본문 추출 실패 ({url}): {e}")
-        return ""
+        logger.warning(f"본문/이미지 추출 실패 ({url}): {e}")
+        return "", None
 
 
 def _parse_date(entry) -> Optional[datetime]:
@@ -101,7 +108,7 @@ def fetch_rss_source(source: dict) -> tuple[int, int, int]:
                 continue
 
             # 본문 수집
-            content = _extract_full_text(url)
+            content, thumbnail_url = _extract_full_text_and_image(url)
 
             article = RawArticle(
                 url=url,
@@ -110,6 +117,7 @@ def fetch_rss_source(source: dict) -> tuple[int, int, int]:
                 content=content or entry.get("summary", ""),
                 author=entry.get("author"),
                 published_at=_parse_date(entry),
+                thumbnail_url=thumbnail_url,
             )
 
             save_article(article)

@@ -155,6 +155,8 @@ def fetch_channel(channel: dict) -> tuple[int, int, int]:
             except ValueError:
                 pass
 
+        thumbnail_url = video.get("thumbnail") or f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+
         article = RawArticle(
             url=url,
             source=channel["name"],
@@ -162,6 +164,7 @@ def fetch_channel(channel: dict) -> tuple[int, int, int]:
             title=video.get("title", ""),
             content=subtitle,
             published_at=published_at,
+            thumbnail_url=thumbnail_url,
         )
 
         save_article(article)

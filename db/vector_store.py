@@ -33,6 +33,15 @@ def _get_engine():
     if _engine is None:
         _engine = create_engine(DATABASE_URL, pool_pre_ping=True)
         _Session = sessionmaker(bind=_engine)
+        
+        # Self-Healing: thumbnail_url 컬럼 자동 생성
+        try:
+            with _engine.connect() as conn:
+                conn.execute(text("ALTER TABLE articles ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;"))
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"DB 마이그레이션 실패 (thumbnail_url 자동 생성): {e}")
+            
     return _engine
 
 
@@ -102,9 +111,9 @@ def save_article(article) -> Optional[str]:
 
         session.execute(text("""
             INSERT INTO articles (id, url_hash, url, source, source_type, title, content,
-                                  author, published_at, embedding)
+                                  author, published_at, thumbnail_url, embedding)
             VALUES (:id, :url_hash, :url, :source, :source_type, :title, :content,
-                    :author, :published_at, CAST(:embedding AS vector))
+                    :author, :published_at, :thumbnail_url, CAST(:embedding AS vector))
             ON CONFLICT (url_hash) DO NOTHING
         """), {
             "id": article_id,
@@ -116,6 +125,7 @@ def save_article(article) -> Optional[str]:
             "content": article.content,
             "author": getattr(article, "author", None),
             "published_at": getattr(article, "published_at", None),
+            "thumbnail_url": getattr(article, "thumbnail_url", None),
             "embedding": embedding_str,
         })
         session.commit()
@@ -334,7 +344,7 @@ def get_latest_articles(limit: int = 20, min_importance: float = 0.0) -> list[di
     session = _get_session()
     try:
         result = session.execute(text("""
-            SELECT a.id, a.title, a.url, a.source, a.summary, a.sentiment, a.importance, a.published_at,
+            SELECT a.id, a.title, a.url, a.source, a.summary, a.sentiment, a.importance, a.published_at, a.thumbnail_url,
                    array_agg(t.category) AS tags
             FROM articles a
             LEFT JOIN tags t ON a.id = t.article_id

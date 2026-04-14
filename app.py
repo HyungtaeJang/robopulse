@@ -106,8 +106,11 @@ html, body, [class*="css"] { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
 }
 .article-card.positive { border-left-color: #22c55e; }
 .article-card.negative { border-left-color: #ef4444; }
-.article-title { font-size: 1.1rem; font-weight: 700; color: #1e293b; }
+.article-title { font-size: 1.1rem; font-weight: 700; color: #1e293b; text-decoration: none; display: inline-block; }
+.article-title:hover { color: #4338ca; text-decoration: underline; }
 .article-summary { color: #475569; font-size: 0.9rem; margin: 0.6rem 0; line-height: 1.6; }
+.article-thumb { width: 140px; height: 90px; border-radius: 6px; object-fit: cover; border: 1px solid #e2e8f0; flex-shrink: 0; }
+.badge-importance { background: #fdf6b2; color: #723b13; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.8rem; }
 
 /* 상태 인디케이터 Dot */
 .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
@@ -306,9 +309,9 @@ with tab_settings:
             else:
                 st.error("DB가 연결되지 않았습니다.")
 
-# Tab 2: 브리핑
+# Tab 2: 인텔리전스 브리핑
 with tab_briefing:
-    st.info("💡 **분석 단계**: Gemma 4 모델이 각 기사의 중요도를 평가하고 3줄 핵심 요약을 생성합니다.")
+    st.info("💡 **심층 분석**: Gemma 4 모델이 각 소스의 중요도를 평가하고 3줄 핵심 요약을 제공하는 인텔리전스 보고서입니다.")
     col_f1, col_f2 = st.columns([2, 2])
     with col_f1: 
         sentiment_filter = st.multiselect("감성 필터", ["positive", "neutral", "negative"], default=["positive", "neutral", "negative"])
@@ -322,11 +325,26 @@ with tab_briefing:
     else:
         for art in filtered:
             sentiment = art.get("sentiment", "neutral")
+            thumbnail = art.get("thumbnail_url")
+            img_tag = f'<img src="{thumbnail}" class="article-thumb" alt="thumbnail">' if thumbnail else ''
+            importance = art.get("importance", 0.0)
+            
             st.markdown(f"""
-            <div class="article-card {sentiment}">
-                <div class="article-title">{art['title']}</div>
-                <p class="article-summary">{art.get('summary', '요약 정보가 없습니다.')}</p>
-                <div class="article-meta">{art.get('source')} · {art.get('published_at')}</div>
+            <div class="article-card {sentiment}" style="display: flex; gap: 20px; align-items: stretch;">
+                {img_tag}
+                <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <a href="{art['url']}" target="_blank" class="article-title">{art['title']}</a>
+                            <span class="badge-importance">⭐ {importance:.1f}</span>
+                        </div>
+                        <p class="article-summary">{art.get('summary', '요약 정보가 없습니다.')}</p>
+                    </div>
+                    <div class="article-meta" style="font-size: 0.8rem; color: #94a3b8; display: flex; justify-content: space-between;">
+                        <span>🏢 {art.get('source')}</span>
+                        <span>🕒 {art.get('published_at')}</span>
+                    </div>
+                </div>
             </div>
             """, unsafe_allow_html=True)
 
