@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Optional
 
 from dotenv import load_dotenv
+from openai import OpenAI
 import httpx
 import redis
 from sqlalchemy import create_engine, text, inspect
