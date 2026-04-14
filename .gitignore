@@ -15,3 +15,5 @@ venv/
 *.log
 logs/
 .streamlit/
+test_*.py
+scratch/
