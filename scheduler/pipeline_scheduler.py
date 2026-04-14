@@ -46,7 +46,7 @@ def job_fetch_news():
         logger.error(f"❌ [뉴스 파이프라인] 오류: {e}")
         raise
 
-def job_analyze_unprocessed():
+def job_analyze_unprocessed(progress_callback=None):
     """뉴스 수집 없이 DB에 저장된 미처리 기사들만 골라 LLM 분석을 수행합니다."""
     from engine.gemma_worker import analyze_article
     from engine.graph_builder import add_analysis_to_graph
@@ -59,10 +59,14 @@ def job_analyze_unprocessed():
         unprocessed = get_unprocessed_articles(limit=50)
         if not unprocessed:
             logger.info("분석할 미처리 기사가 없습니다.")
+            if progress_callback:
+                progress_callback(0, 0)
             return
 
-        logger.info(f"LLM 분석 대상: {len(unprocessed)}건")
-        for article in unprocessed:
+        total = len(unprocessed)
+        logger.info(f"LLM 분석 대상: {total}건")
+        
+        for i, article in enumerate(unprocessed, 1):
             analysis = analyze_article(
                 title=article["title"],
                 content=article["content"],
@@ -75,11 +79,17 @@ def job_analyze_unprocessed():
                     entities=[e.model_dump() for e in analysis.entities],
                     relations=[r.model_dump() for r in analysis.relations],
                 )
+            
+            # 콜백을 통해 실시간 진행률 보고 (현재 수, 전체 수)
+            if progress_callback:
+                progress_callback(i, total)
         
         elapsed = (datetime.now() - start).total_seconds()
-        logger.info(f"✅ [분석 완료] {len(unprocessed)}건 처리됨 ({elapsed:.1f}초)")
+        logger.info(f"✅ [분석 완료] {total}건 처리됨 ({elapsed:.1f}초)")
     except Exception as e:
         logger.error(f"❌ [분석 오류] {e}")
+        if progress_callback:
+            progress_callback(-1, 0) # 오류 발생 신호
 
 
 def job_fetch_videos():

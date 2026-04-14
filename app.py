@@ -11,6 +11,8 @@ import random
 import streamlit as st
 import plotly.graph_objects as go
 import networkx as nx
+import threading
+import time
 
 try:
     from db.vector_store import (
@@ -126,6 +128,44 @@ div[data-testid="stTab"] button { font-size: 1rem !important; font-weight: 600 !
 </style>
 """, unsafe_allow_html=True)
 
+# ---- 세션 스테이트 초기화 ------------------------------------
+if "analysis_active" not in st.session_state:
+    st.session_state.analysis_active = False
+if "analysis_current" not in st.session_state:
+    st.session_state.analysis_current = 0
+if "analysis_total" not in st.session_state:
+    st.session_state.analysis_total = 0
+if "analysis_done" not in st.session_state:
+    st.session_state.analysis_done = False
+
+def analysis_callback(current, total):
+    """백그라운드 스레드에서 호출되어 진행률을 업데이트하는 콜백"""
+    if current == -1: # 오류 발생
+        st.session_state.analysis_active = False
+        return
+    
+    st.session_state.analysis_current = current
+    st.session_state.analysis_total = total
+    
+    if current >= total and total > 0:
+        st.session_state.analysis_active = False
+        st.session_state.analysis_done = True
+
+def run_analysis_in_background():
+    """AI 분석을 백그라운드 스레드에서 시작"""
+    st.session_state.analysis_active = True
+    st.session_state.analysis_current = 0
+    st.session_state.analysis_total = 0
+    st.session_state.analysis_done = False
+    
+    thread = threading.Thread(target=job_analyze_unprocessed, args=(analysis_callback,))
+    thread.start()
+
+# 분석 완료 시 토스트 알림 처리
+if st.session_state.analysis_done:
+    st.toast("✅ AI 심층 분석이 완료되었습니다. 결과가 대시보드에 반영되었습니다.")
+    st.session_state.analysis_done = False
+
 # ---- 데이터 로드 및 초기화 ------------------------------------
 conn_status = check_all_connections()
 is_live = conn_status["postgres"]
@@ -211,6 +251,20 @@ with st.sidebar:
             st.warning("Local LLM 연결 확인 필요")
 
     st.markdown("---")
+    
+    # AI 분석 진행 상태 (사이드바 하단 상시 노출)
+    if st.session_state.analysis_active:
+        st.markdown("**AI 분석 진행 중...**")
+        prog_val = 0
+        if st.session_state.analysis_total > 0:
+            prog_val = st.session_state.analysis_current / st.session_state.analysis_total
+        
+        st.progress(prog_val)
+        st.caption(f"처리 중: {st.session_state.analysis_current} / {st.session_state.analysis_total}")
+        # 클릭 유도용 (진행 중일 때 화면 갱신을 독려)
+        if st.button("상태 새로고침", key="analysis_refresh"):
+            st.rerun()
+
     st.caption(f"Model: {LMS_MODEL_NAME.split('/')[-1]}")
 
 # ---- 메인 헤더 ----------------------------------------------
@@ -268,12 +322,16 @@ with tab_monitor:
     st.markdown("### 인텔리전스 엔진 제어")
     ca1, ca2 = st.columns(2)
     with ca1:
-        if st.button("미처리 데이터 AI 분석", use_container_width=True, type="secondary"):
-            if is_live:
-                with st.spinner("Gemma 4가 기사를 분석 중입니다..."):
-                    job_analyze_unprocessed()
-                st.rerun()
-            else: st.warning("DB 연결이 필요합니다.")
+        if st.session_state.analysis_active:
+            st.button("AI 분석 진행 중...", use_container_width=True, type="secondary", disabled=True)
+        else:
+            if st.button("미처리 데이터 AI 분석", use_container_width=True, type="primary"):
+                if is_live:
+                    run_analysis_in_background()
+                    st.toast("🚀 AI 분석을 백그라운드에서 시작합니다.")
+                    st.rerun()
+                else: 
+                    st.warning("DB 연결이 필요합니다.")
     with ca2:
         st.caption("수집은 되었으나 아직 AI 분석(요약, 엔티티 추출 등)이 완료되지 않은 기사들을 처리합니다.")
 
