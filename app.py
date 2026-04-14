@@ -380,6 +380,9 @@ with tab_briefing:
 # Tab 3: 지식 그래프
 with tab_graph:
     st.info("💡 **추출 단계**: 뉴스 본문에서 기업, 기술, 관계를 추출하여 산업 지형도를 시각화합니다.")
+    
+    col_g1, col_g2 = st.columns([3, 1])
+    
     with col_g1:
         G_full = get_graph() if is_live else nx.DiGraph()
         
