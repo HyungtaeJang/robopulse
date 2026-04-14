@@ -19,43 +19,22 @@ logger = logging.getLogger(__name__)
 
 NEWS_INTERVAL_HOURS = int(os.getenv("NEWS_FETCH_INTERVAL_HOURS", "1"))
 VIDEO_CRON_HOUR = int(os.getenv("VIDEO_FETCH_CRON_HOUR", "3"))
+ANALYSIS_CRON_HOUR = int(os.getenv("ANALYSIS_CRON_HOUR", "2"))
 
 
 # ---- 파이프라인 작업 함수들 ---------------------------------
 
 def job_fetch_news():
-    """뉴스 RSS 전체 수집 → LLM 분석 → DB 저장 파이프라인"""
+    """뉴스 RSS 전체 수집 후 DB 저장까지만 수행하는 가벼운 파이프라인"""
     from ingestion.news_scraper import run_all_sources
-    from engine.gemma_worker import analyze_article
-    from engine.graph_builder import add_analysis_to_graph
-    from db.vector_store import get_unprocessed_articles, save_analysis_result, get_pipeline_stats
-    from db.vector_store import _get_session
-
+    
     logger.info("📰 [뉴스 파이프라인] 시작")
     start = datetime.now()
 
     try:
-        # Step 1: 수집
+        # Step 1: 수집 (분석은 심야 배치로 이관)
         result = run_all_sources()
         logger.info(f"수집 완료: {result}")
-
-        # Step 2: 미처리 기사 LLM 분석
-        unprocessed = get_unprocessed_articles(limit=50)
-        logger.info(f"LLM 분석 대상: {len(unprocessed)}건")
-
-        for article in unprocessed:
-            analysis = analyze_article(
-                title=article["title"],
-                content=article["content"],
-                source=article["source"],
-            )
-            if analysis:
-                save_analysis_result(article["id"], analysis)
-                add_analysis_to_graph(
-                    article_id=article["id"],
-                    entities=[e.model_dump() for e in analysis.entities],
-                    relations=[r.model_dump() for r in analysis.relations],
-                )
 
         elapsed = (datetime.now() - start).total_seconds()
         _log_pipeline(source="news", status="success",
@@ -104,11 +83,8 @@ def job_analyze_unprocessed():
 
 
 def job_fetch_videos():
-    """유튜브 채널 자막 수집 → LLM 분석 → DB 저장 파이프라인"""
+    """유튜브 채널 자막 수집 후 DB 저장까지만 수행하는 파이프라인"""
     from ingestion.video_processor import run_all_channels
-    from engine.gemma_worker import analyze_article
-    from engine.graph_builder import add_analysis_to_graph
-    from db.vector_store import get_unprocessed_articles, save_analysis_result
 
     logger.info("🎬 [영상 파이프라인] 시작")
     start = datetime.now()
@@ -116,21 +92,6 @@ def job_fetch_videos():
     try:
         result = run_all_channels()
         logger.info(f"수집 완료: {result}")
-
-        unprocessed = get_unprocessed_articles(limit=30)
-        for article in unprocessed:
-            analysis = analyze_article(
-                title=article["title"],
-                content=article["content"],
-                source=article["source"],
-            )
-            if analysis:
-                save_analysis_result(article["id"], analysis)
-                add_analysis_to_graph(
-                    article_id=article["id"],
-                    entities=[e.model_dump() for e in analysis.entities],
-                    relations=[r.model_dump() for r in analysis.relations],
-                )
 
         elapsed = (datetime.now() - start).total_seconds()
         _log_pipeline(source="youtube", status="success",
@@ -210,9 +171,21 @@ def start_scheduler() -> BackgroundScheduler:
         misfire_grace_time=1800,  # 30분 내에 시작 못하면 스킵
     )
 
+    # 심야 AI 심층 분석: 매일 새벽 ANALYSIS_CRON_HOUR시 30분
+    _scheduler.add_job(
+        job_analyze_unprocessed,
+        trigger="cron",
+        hour=ANALYSIS_CRON_HOUR,
+        minute=30,
+        id="analysis_pipeline",
+        name="야간 AI 심층 분석",
+        max_instances=1,
+        misfire_grace_time=1800,  # 30분 내에 시작 못하면 스킵
+    )
+
     _scheduler.start()
     logger.info(f"✅ 스케줄러 시작 | 뉴스: 매 {NEWS_INTERVAL_HOURS}시간 | "
-                f"영상: 매일 {VIDEO_CRON_HOUR:02d}:00")
+                f"영상: 매일 {VIDEO_CRON_HOUR:02d}:00 | 분석: 매일 {ANALYSIS_CRON_HOUR:02d}:30")
     return _scheduler
 
 
@@ -236,3 +209,13 @@ def get_scheduler_status() -> list[dict]:
             "next_run": str(job.next_run_time),
         })
     return jobs
+
+
+def update_analysis_schedule(hour: int) -> bool:
+    """야간 AI 심층 분석의 실행 시간을 동적으로 변경합니다."""
+    global _scheduler
+    if _scheduler and _scheduler.running:
+        _scheduler.reschedule_job("analysis_pipeline", trigger="cron", hour=hour, minute=30)
+        logger.info(f"✅ AI 분석 스케줄 변경 완료: 매일 {hour:02d}:30")
+        return True
+    return False

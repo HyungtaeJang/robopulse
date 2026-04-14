@@ -292,6 +292,31 @@ with tab_settings:
                     delete_news_source(src['id'])
                     st.rerun()
             st.markdown("---")
+    st.markdown("### 야간 AI 심층 분석 스케줄링")
+    st.caption("새벽 시간에 몰아서 무거운 AI 분석(모델 추론, 번역, 지식그래프 구성)을 수행하는 시간대입니다.")
+    
+    current_analysis_hour = int(os.getenv("ANALYSIS_CRON_HOUR", "2"))
+    
+    if "analysis_hour" not in st.session_state:
+        st.session_state.analysis_hour = current_analysis_hour
+        
+    def on_hour_change():
+        from scheduler.pipeline_scheduler import update_analysis_schedule
+        new_hr = st.session_state.analysis_hour
+        success = update_analysis_schedule(new_hr)
+        if success:
+            st.toast(f"✅ AI 분석 스케줄이 '매일 새벽 {new_hr:02d}:30'으로 변경되었습니다.")
+        else:
+            st.toast("⚠️ 스케줄러가 아직 활성화되지 않았습니다.", icon="⚠️")
+
+    st.selectbox(
+        "분석 시작 시간 (0~23시)", 
+        options=list(range(24)), 
+        format_func=lambda x: f"매일 {x:02d}시 30분",
+        key="analysis_hour",
+        on_change=on_hour_change
+    )
+    st.markdown("---")
     
     st.markdown("### 시스템 초기화")
     st.warning("주의: 초기화 시 수집된 모든 기사와 분석 데이터가 영구적으로 삭제됩니다.")
