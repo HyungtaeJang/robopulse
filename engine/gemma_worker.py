@@ -41,6 +41,7 @@ class Relation(BaseModel):
 
 
 class ArticleAnalysis(BaseModel):
+    translated_title: str = Field(..., description="기사/영상 원본 제목의 자연스러운 한국어 번역")
     summary: str = Field(..., description="3줄 이내 핵심 요약 (한국어)")
     tech_categories: list[str] = Field(default_factory=list)
     companies: list[str] = Field(default_factory=list)

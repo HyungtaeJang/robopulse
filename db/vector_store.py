@@ -34,13 +34,29 @@ def _get_engine():
         _engine = create_engine(DATABASE_URL, pool_pre_ping=True)
         _Session = sessionmaker(bind=_engine)
         
-        # Self-Healing: thumbnail_url 컬럼 자동 생성
+        # Self-Healing: thumbnail_url 컬럼 자동 생성 및 백필
         try:
             with _engine.connect() as conn:
                 conn.execute(text("ALTER TABLE articles ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;"))
+                
+                # 기존 유튜브 영상 썸네일 일괄 복구
+                conn.execute(text("""
+                    UPDATE articles 
+                    SET thumbnail_url = 'https://i.ytimg.com/vi/' || substring(url from 'v=([^&]+)') || '/hqdefault.jpg'
+                    WHERE source_type = 'video' AND thumbnail_url IS NULL AND url LIKE '%v=%';
+                """))
+                
+                # 아직 한국어로 번역되지 않은 영어 제목의 기사를 재분석 대기열로 돌림
+                # (정규식을 통해 한글이 전혀 없는 제목의 is_processed를 FALSE로 변경)
+                conn.execute(text("""
+                    UPDATE articles 
+                    SET is_processed = FALSE 
+                    WHERE title !~ '[가-힣]' AND is_processed = TRUE;
+                """))
+                
                 conn.commit()
         except Exception as e:
-            logger.warning(f"DB 마이그레이션 실패 (thumbnail_url 자동 생성): {e}")
+            logger.warning(f"DB 마이그레이션/백필 실패: {e}")
             
     return _engine
 
@@ -153,12 +169,14 @@ def save_analysis_result(article_id: str, analysis) -> None:
                 sentiment = :sentiment,
                 importance = :importance,
                 is_processed = TRUE,
-                processed_at = NOW()
+                processed_at = NOW(),
+                title = COALESCE(:translated_title, title)
             WHERE id = :article_id
         """), {
             "summary": analysis.summary,
             "sentiment": analysis.sentiment,
             "importance": analysis.importance_score,
+            "translated_title": getattr(analysis, 'translated_title', None),
             "article_id": article_id,
         })
 
