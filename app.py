@@ -334,27 +334,63 @@ with tab_briefing:
 with tab_graph:
     st.info("💡 **추출 단계**: 뉴스 본문에서 기업, 기술, 관계를 추출하여 산업 지형도를 시각화합니다.")
     col_g1, col_g2 = st.columns([3, 1])
+
+    with col_g2:
+        st.markdown("### 그래프 필터")
+        top_n = st.slider("표시 노드 수", 10, 100, 30)
+        st.markdown("---")
+        st.markdown("**범례 (Legend)**")
+        st.markdown("🔵 기업 (Company)")
+        st.markdown("🟠 기술 (Technology)")
+        st.markdown("🟢 제품 (Product)")
+        st.markdown("🔴 기관 (Institution)")
+
     with col_g1:
         G = get_graph() if is_live else nx.DiGraph()
         if G.number_of_nodes() == 0:
             st.info("그래프 데이터가 없습니다.")
         else:
-            pos = nx.spring_layout(G, k=1.5, seed=42)
-            node_x = [pos[n][0] for n in G.nodes()]
-            node_y = [pos[n][1] for n in G.nodes()]
-            node_trace = go.Scatter(x=node_x, y=node_y, mode='markers+text', text=list(G.nodes()), 
-                                    textposition="top center", marker=dict(size=12, color='#4338ca'))
-            fig = go.Figure(data=[node_trace])
-            fig.update_layout(showlegend=False, height=600, margin=dict(t=0, b=0, l=0, r=0))
+            # 상위 노드 필터링
+            nodes_sorted = sorted(G.nodes(data=True), key=lambda x: x[1].get("mention_count", 0), reverse=True)[:top_n]
+            top_node_names = [n[0] for n in nodes_sorted]
+            subG = G.subgraph(top_node_names)
+
+            pos = nx.spring_layout(subG, k=1.0, seed=42)
+            color_map = {"company": "#4338ca", "technology": "#f97316", "product": "#22c55e", "institution": "#ef4444", "unknown": "#94a3b8"}
+
+            # 엣지(관계선) 생성
+            edge_x, edge_y = [], []
+            for edge in subG.edges():
+                x0, y0 = pos[edge[0]]
+                x1, y1 = pos[edge[1]]
+                edge_x.extend([x0, x1, None])
+                edge_y.extend([y0, y1, None])
+
+            edge_trace = go.Scatter(x=edge_x, y=edge_y, line=dict(width=1, color='#CBD5E1'), hoverinfo='none', mode='lines')
+
+            # 노드 생성
+            node_x, node_y, node_colors, node_sizes, node_texts = [], [], [], [], []
+            for node in subG.nodes():
+                x, y = pos[node]
+                node_x.append(x)
+                node_y.append(y)
+                attrs = subG.nodes[node]
+                ntype = attrs.get("type", "unknown")
+                mcount = attrs.get("mention_count", 1)
+                node_colors.append(color_map.get(ntype, color_map["unknown"]))
+                node_sizes.append(max(15, min(50, 15 + mcount * 5)))
+                node_texts.append(f"<b>{node}</b><br>Type: {ntype}<br>Mentions: {mcount}")
+
+            node_trace = go.Scatter(x=node_x, y=node_y, mode='markers+text', text=list(subG.nodes()), 
+                                    textposition="top center", hoverinfo='text', hovertext=node_texts,
+                                    marker=dict(color=node_colors, size=node_sizes, line_width=2, line_color='white'))
+
+            fig = go.Figure(data=[edge_trace, node_trace],
+                         layout=go.Layout(showlegend=False, hovermode='closest', margin=dict(b=0, l=0, r=0, t=0),
+                                          xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                                          yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                                          height=600, plot_bgcolor='white'))
             st.plotly_chart(fig, use_container_width=True)
-    with col_g2:
-        st.markdown("**핵심 엔티티**")
-        if is_live:
-            db_entities = get_all_entities_for_graph()
-            for name, etype in db_entities[:20]:
-                st.write(f"- {name} ({etype})")
-        else:
-            st.write("데모 모드에서는 엔티티 목록이 표시되지 않습니다.")
 
 # Tab 4: AI 챗봇
 with tab_chat:
