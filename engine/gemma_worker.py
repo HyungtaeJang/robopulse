@@ -95,15 +95,27 @@ def analyze_article(
 
     try:
         client = get_lms_client()
+        
+        # Pydantic 모델에서 JSON 스키마 추출
+        json_schema = ArticleAnalysis.model_json_schema()
+        
         response = client.chat.completions.create(
             model=LMS_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.1,        # 구조화 출력을 위해 낮게 설정
+            temperature=0.1,
             max_tokens=2048,
-            response_format={"type": "json_object"},  # LM Studio JSON 모드
+            # 'json_object' 대신 'json_schema' 규격 사용
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "article_analysis",
+                    "strict": False,
+                    "schema": json_schema
+                }
+            },
         )
 
         raw_json = response.choices[0].message.content
