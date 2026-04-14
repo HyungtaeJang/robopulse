@@ -15,15 +15,14 @@ import networkx as nx
 try:
     from db.vector_store import (
         check_all_connections, get_pipeline_stats, get_latest_articles, 
-        get_all_articles, clear_all_data, get_all_relations, get_all_entities_for_graph,
+        clear_all_data, get_all_relations, get_all_entities_for_graph,
         init_news_sources, get_news_sources, add_news_source, toggle_news_source, delete_news_source,
-        get_youtube_sources, get_recommended_sources, get_lms_client
+        get_youtube_sources, get_recommended_sources, get_lms_client, semantic_search
     )
     from scheduler.pipeline_scheduler import (
         start_scheduler, get_scheduler_status, job_fetch_news, job_fetch_videos, job_analyze_unprocessed
     )
     from engine.graph_builder import get_graph, rebuild_from_db, get_entity_stats
-    from engine.gemma_worker import semantic_search
     is_live = True
 except Exception as e:
     is_live = False
