@@ -22,7 +22,7 @@ from db.vector_store import save_article, get_news_sources
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-# MAX_PER_SOURCE = int(os.getenv("MAX_ARTICLES_PER_SOURCE", "20"))
+MAX_PER_SOURCE = int(os.getenv("MAX_ARTICLES_PER_SOURCE", "20"))
 
 
 # ---- 데이터 구조 -------------------------------------------

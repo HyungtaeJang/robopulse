@@ -287,7 +287,9 @@ with tab_settings:
             if is_live:
                 with st.spinner("시스템 초기화 중..."):
                     clear_all_data(reset_sources=True)
-                st.success("데이터베이스가 깨끗하게 비워졌습니다.")
+                st.toast("✅ 데이터베이스가 깨끗하게 비워졌습니다.", icon="🗑️")
+                import time
+                time.sleep(1) # 사용자가 메시지를 읽을 시간을 줍니다.
                 st.rerun()
             else:
                 st.error("DB가 연결되지 않았습니다.")
