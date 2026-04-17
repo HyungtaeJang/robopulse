@@ -169,6 +169,25 @@ html, body, [class*="css"] { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
 .badge-importance { background: #fdf6b2; color: #723b13; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.8rem; }
 .tag-badge { background: #eff6ff; color: #1d4ed8; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; margin-right: 4px; border: 1px solid #dbeafe; }
 
+/* 카드 내 태그 버튼 초소형 스타일 */
+.tag-container div.stButton > button {
+    padding: 2px 8px !important;
+    min-height: 22px !important;
+    height: 22px !important;
+    font-size: 0.72rem !important;
+    line-height: normal !important;
+    border-radius: 4px !important;
+    background-color: #f8fafc !important;
+    color: #475569 !important;
+    border: 1px solid #e2e8f0 !important;
+    margin-right: 0px !important;
+}
+.tag-container div.stButton > button:hover {
+    border-color: #6366f1 !important;
+    color: #6366f1 !important;
+    background-color: #eef2ff !important;
+}
+
 /* 상태 인디케이터 Dot */
 .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
 
@@ -538,13 +557,16 @@ with tab_briefing:
             st.markdown(f'<div class="metric-card"><div class="metric-value">{val}</div><div class="metric-label">{label} ({unit})</div></div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.info("심층 분석: Gemma 4 모델이 각 소스의 중요도를 평가하고 요점(Key Points)을 정리한 인텔리전스 보고서입니다.")
     
     # --- 상단 필터 바 ---
     f_col1, f_col2, f_col3, f_col4 = st.columns([2, 2, 2, 1])
     
     with f_col1:
-        st.session_state.briefing_today_only = st.checkbox("오늘 수집된 정보만", value=st.session_state.briefing_today_only)
+        st.session_state.briefing_today_only = st.checkbox(
+            "오늘 수집된 정보만", 
+            value=st.session_state.briefing_today_only,
+            on_change=st.rerun
+        )
     
     with f_col2:
         st.session_state.briefing_sort_by = st.selectbox(
@@ -552,7 +574,8 @@ with tab_briefing:
             options=["date", "importance"], 
             format_func=lambda x: "최신순" if x == "date" else "중요도순",
             index=0 if st.session_state.briefing_sort_by == "date" else 1,
-            key="sort_by_select"
+            key="sort_by_select",
+            on_change=st.rerun
         )
     
     with f_col3:
@@ -620,25 +643,34 @@ with tab_briefing:
                         <p class="article-summary">{art.get('summary', '요약 정보가 없습니다.')}</p>
                         {key_points_html}
                     </div>
-                    <div class="article-meta" style="font-size: 0.8rem; color: #94a3b8; display: flex; justify-content: space-between; margin-top: 12px;">
-                        <span>🏢 {art.get('source')}</span>
-                        <span>{date_label}: {date_val}</span>
-                    </div>
+                    <!-- 태그 배치를 위한 여백 확보 -->
+                    <div style="margin-top: 30px;"></div>
                 </div>
             </div>
             """)
             
-            # 태그 버튼 (가로 정렬)
+            # 태그 버튼을 카드 내부 하단 메타 정보 바로 위에 배치 (배치 보정)
             tags = art.get('tags', [])
             if tags and tags[0] is not None:
-                tag_row = ""
-                # Streamlit 버튼을 개별적으로 배치
-                btn_cols = st.columns(min(len(tags), 8))
-                for idx, tag in enumerate(tags[:8]): # 최대 8개까지만 인터렉티브하게 표시
-                    if tag:
-                        if btn_cols[idx].button(f"#{tag}", key=f"tbtn_{art['id']}_{tag}", type="secondary"):
+                valid_tags = [t for t in tags if t and t != 'None'][:8]
+                if valid_tags:
+                    # 카드 내부 위치 확보를 위한 음수 마진 컨테이너
+                    st.markdown('<div class="tag-container" style="margin-top: -75px; margin-left: 170px; position: relative; z-index: 10;">', unsafe_allow_html=True)
+                    t_cols = st.columns([1, 1, 1, 1, 1, 1, 1, 1, 8])
+                    for idx, tag in enumerate(valid_tags):
+                        if t_cols[idx].button(f"#{tag}", key=f"tbtn_{art['id']}_{tag}", type="secondary"):
                             st.session_state.briefing_filter_tag = tag
                             st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    st.markdown('<div style="margin-top: 40px;"></div>', unsafe_allow_html=True)
+            
+            # 하단 메타 정보 별도 렌더링 (카드와 겹쳐 보이도록 배치)
+            st.html(f"""
+            <div style="margin-top: -55px; margin-left: 170px; font-size: 0.8rem; color: #94a3b8; display: flex; justify-content: space-between; padding-bottom: 20px; position: relative;">
+                <span>🏢 {art.get('source')}</span>
+                <span>{date_label}: {date_val}</span>
+            </div>
+            """)
 
         # 3. 하단 데이터 수집 현황 (간결한 형태)
         st.markdown("---")

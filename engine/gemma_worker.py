@@ -52,6 +52,7 @@ class ArticleAnalysis(BaseModel):
     entities: list[Entity] = Field(default_factory=list)
     relations: list[Relation] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    key_points: list[str] = Field(default_factory=list, description="기사의 핵심 요점 2~3가지 (한글 불릿포인트)")
 
 
 # ---- 프롬프트 로더 -----------------------------------------
