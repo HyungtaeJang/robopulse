@@ -173,7 +173,7 @@ html, body, [class*="css"] { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
 .tag-badge { background: #eff6ff; color: #1d4ed8; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; margin-right: 4px; border: 1px solid #dbeafe; }
 
 /* 태그 버튼 전용 스타일 및 카드 내부 배치 정밀 보정 */
-div[data-testid="element-container"]:has(.tags-wrapper) + div[data-testid="stHorizontalBlock"] {
+div[data-testid="element-container"]:has(.tags-wrapper) + div[data-testid="element-container"] {
     margin-top: -65px !important;
     margin-left: 175px !important;
     margin-bottom: 25px !important;
@@ -181,7 +181,7 @@ div[data-testid="element-container"]:has(.tags-wrapper) + div[data-testid="stHor
     position: relative;
     z-index: 10;
 }
-div[data-testid="element-container"]:has(.tags-wrapper) + div[data-testid="stHorizontalBlock"] button[kind="secondary"] {
+div[data-testid="element-container"]:has(.tags-wrapper) + div[data-testid="element-container"] button[kind="secondary"] {
     background-color: #eff6ff !important;
     color: #1d4ed8 !important;
     border: 1px solid #dbeafe !important;
@@ -193,7 +193,7 @@ div[data-testid="element-container"]:has(.tags-wrapper) + div[data-testid="stHor
     height: 24px !important;
     line-height: normal !important;
 }
-div[data-testid="element-container"]:has(.tags-wrapper) + div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover {
+div[data-testid="element-container"]:has(.tags-wrapper) + div[data-testid="element-container"] button[kind="secondary"]:hover {
     background-color: #dbeafe !important;
     border-color: #bfdbfe !important;
 }
