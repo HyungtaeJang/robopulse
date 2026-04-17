@@ -324,6 +324,7 @@ with st.sidebar:
         if st.button("새로고침", key="analysis_refresh"):
             st.rerun()
 
+    st.markdown("---")
     st.markdown('<p style="font-size:0.85rem; font-weight:700; color:#475569; margin-bottom:10px;">시스템 제어</p>', unsafe_allow_html=True)
     
     if st.session_state.system_status:
