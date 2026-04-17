@@ -172,14 +172,30 @@ html, body, [class*="css"] { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
 .badge-importance { background: #fdf6b2; color: #723b13; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.8rem; }
 .tag-badge { background: #eff6ff; color: #1d4ed8; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; margin-right: 4px; border: 1px solid #dbeafe; }
 
-/* 카드 내 태그 버튼 초소형 스타일 */
-[data-testid="column"] button[kind="secondary"] {
-    padding: 0rem 0.5rem !important;
+/* 태그 버튼 전용 스타일 및 카드 내부 배치 정밀 보정 */
+div[data-testid="element-container"]:has(.tags-wrapper) + div[data-testid="stHorizontalBlock"] {
+    margin-top: -65px !important;
+    margin-left: 175px !important;
+    margin-bottom: 25px !important;
+    width: calc(100% - 195px) !important;
+    position: relative;
+    z-index: 10;
+}
+div[data-testid="element-container"]:has(.tags-wrapper) + div[data-testid="stHorizontalBlock"] button[kind="secondary"] {
+    background-color: #eff6ff !important;
+    color: #1d4ed8 !important;
+    border: 1px solid #dbeafe !important;
+    padding: 1px 8px !important;
+    border-radius: 4px !important;
+    font-size: 0.72rem !important;
+    font-weight: 600 !important;
     min-height: 24px !important;
     height: 24px !important;
-    font-size: 0.75rem !important;
     line-height: normal !important;
-    border-radius: 4px !important;
+}
+div[data-testid="element-container"]:has(.tags-wrapper) + div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover {
+    background-color: #dbeafe !important;
+    border-color: #bfdbfe !important;
 }
 
 /* 상태 인디케이터 Dot */
@@ -625,6 +641,10 @@ with tab_briefing:
                 </div>
                 """
             
+            tags = art.get('tags', [])
+            valid_tags = [t for t in tags if t and t != 'None'][:8] if tags else []
+            tag_space_html = '<div style="height: 35px;"></div>' if valid_tags else ''
+
             st.html(f"""
             <div class="article-card {sentiment}" style="display: flex; gap: 20px; align-items: stretch;">
                 {img_tag}
@@ -637,27 +657,24 @@ with tab_briefing:
                         <p class="article-summary">{art.get('summary', '요약 정보가 없습니다.')}</p>
                         {key_points_html}
                     </div>
-                    <div class="article-meta" style="font-size: 0.8rem; color: #94a3b8; display: flex; justify-content: space-between; margin-top: 12px;">
+                    <div class="article-meta" style="font-size: 0.8rem; color: #94a3b8; display: flex; justify-content: space-between; margin-top: 12px; margin-bottom: 5px;">
                         <span>🏢 {art.get('source')}</span>
                         <span>{date_label}: {date_val}</span>
                     </div>
+                    {tag_space_html}
                 </div>
             </div>
             """)
             
-            # 태그 버튼을 기사카드 바로 아래 깔끔하게 가로 정렬
-            tags = art.get('tags', [])
-            if tags and tags[0] is not None:
-                valid_tags = [t for t in tags if t and t != 'None'][:8]
-                if valid_tags:
-                    st.markdown('<div style="margin-top: -15px; margin-bottom: 20px; padding-left: 10px;">', unsafe_allow_html=True)
-                    # 여유 있는 공간 할당을 위한 컬럼 분배
-                    t_cols = st.columns(len(valid_tags) + max(0, 10 - len(valid_tags)))
-                    for idx, tag in enumerate(valid_tags):
-                        if t_cols[idx].button(f"#{tag}", key=f"tbtn_{art['id']}_{tag}", type="secondary", help=f"#{tag} 필터링"):
-                            st.session_state.briefing_filter_tag = tag
-                            st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
+            # 태그 버튼을 카드 내부 하단 빈 공간(tag_space)으로 끌어올림
+            if valid_tags:
+                st.markdown('<div class="tags-wrapper" style="height:0; overflow:hidden;"></div>', unsafe_allow_html=True)
+                # 여유 있는 공간 할당을 위한 컬럼 분배
+                t_cols = st.columns(len(valid_tags) + max(0, 10 - len(valid_tags)))
+                for idx, tag in enumerate(valid_tags):
+                    if t_cols[idx].button(f"#{tag}", key=f"tbtn_{art['id']}_{tag}", type="secondary", help=f"#{tag} 필터링"):
+                        st.session_state.briefing_filter_tag = tag
+                        st.rerun()
 
         # 3. 하단 데이터 수집 현황 (간결한 형태)
         st.markdown("---")
