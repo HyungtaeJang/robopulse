@@ -121,7 +121,8 @@ html, body, [class*="css"] { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
 
 /* 헤더 타이틀 */
 .hero-title {
-    font-size: 2.5rem; font-weight: 900; letter-spacing: -1px;
+    font-size: 2.5rem; font-weight: 900; letter-spacing: -1px;미처리 데이터 분석이나, 데이터 리프레시 같은 기능은 사이드바에 있는게 맞을 것 같은데. (로그도 별로 보여줄게 없다면 굳이 UI로 있을 필요도 없을 것 같아)
+그리고 미처리 데이터 ai 분석 버튼이 동작 안하는것 같아. 
     background: linear-gradient(135deg, #4338ca 0%, #7c3aed 100%);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     background-clip: text; margin: 0;
@@ -286,8 +287,6 @@ with st.sidebar:
         if is_live and not conn_status["lms"]:
             st.warning("Local LLM 연결 확인 필요")
 
-    st.markdown("---")
-    
     # AI 분석 진행 상태 (전역 ANALYSIS_MANAGER 참조)
     if mgr["active"]:
         st.markdown("**AI 분석 진행 중...**")
