@@ -43,6 +43,7 @@ class Relation(BaseModel):
 class ArticleAnalysis(BaseModel):
     translated_title: str = Field(..., description="기사/영상 원본 제목의 자연스러운 한국어 번역")
     summary: str = Field(..., description="3줄 이내 핵심 요약 (한국어)")
+    key_points: list[str] = Field(default_factory=list, description="기사의 핵심 요점 1~2가지 (한글 불릿포인트, 3개 이상 작성 금지)")
     tech_categories: list[str] = Field(default_factory=list)
     companies: list[str] = Field(default_factory=list)
     institutions: list[str] = Field(default_factory=list)
@@ -52,7 +53,6 @@ class ArticleAnalysis(BaseModel):
     entities: list[Entity] = Field(default_factory=list)
     relations: list[Relation] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
-    key_points: list[str] = Field(default_factory=list, description="기사의 핵심 요점 2~3가지 (한글 불릿포인트)")
 
 
 # ---- 프롬프트 로더 -----------------------------------------
