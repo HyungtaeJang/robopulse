@@ -103,8 +103,8 @@ DEMO_STATS = {
 
 # ---- 페이지 설정 -------------------------------------------
 st.set_page_config(
-    page_title="RoboPulse Intelligence",
-    page_icon="🤖",
+    page_title="RoboPulse",
+    page_icon="",
     layout="wide",
 )
 
@@ -178,6 +178,12 @@ div[data-testid="stTab"] button { font-size: 1rem !important; font-weight: 600 !
 # ---- 세션 스테이트 초기화 및 분석 알림 --------------------------
 if "analysis_done_toast" not in st.session_state:
     st.session_state.analysis_done_toast = False
+if "briefing_filter_tag" not in st.session_state:
+    st.session_state.briefing_filter_tag = None
+if "briefing_today_only" not in st.session_state:
+    st.session_state.briefing_today_only = False
+if "briefing_sort_by" not in st.session_state:
+    st.session_state.briefing_sort_by = "date"
 
 # 전역 매니저에서 상태 읽어오기
 mgr = globals()["ANALYSIS_MANAGER"]
@@ -205,7 +211,14 @@ if is_live and "graph_initialized" not in st.session_state:
 
 if is_live:
     stats = get_pipeline_stats()
-    articles = get_latest_articles(limit=20)
+    # 파라미터 기반 기사 로드
+    articles = get_latest_articles(
+        limit=50, 
+        min_importance=0.0, 
+        today_only=st.session_state.briefing_today_only,
+        tag_filter=st.session_state.briefing_filter_tag,
+        sort_by=st.session_state.briefing_sort_by
+    )
     scheduler_jobs = get_scheduler_status()
 else:
     stats = DEMO_STATS
@@ -214,9 +227,7 @@ else:
 
 # ---- 사이드바 -----------------------------------------------
 with st.sidebar:
-    st.markdown('<p class="hero-title" style="font-size:2rem; margin-top:-20px; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">RoboPulse</p>', unsafe_allow_html=True)
-    st.markdown('<p style="font-size:0.8rem; color:#64748b; font-weight:600; margin-bottom:15px; margin-top:-5px; letter-spacing:1px;">INTELLIGENCE ENGINE</p>', unsafe_allow_html=True)
-    
+        
     if is_live:
         st.markdown('<div class="mode-badge" style="background:#dcfce7; color:#166534">Live Mode</div>', unsafe_allow_html=True)
     else:
@@ -295,7 +306,7 @@ with st.sidebar:
 # ---- 메인 헤더 ----------------------------------------------
 col_h1, col_h2 = st.columns([8, 2])
 with col_h1:
-    st.markdown('<h1 class="hero-title">RoboPulse Intelligence</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="hero-title">RoboPulse</h1>', unsafe_allow_html=True)
     st.markdown('<p class="hero-sub">홈로봇 관련 데이터 수집 자동화 엔진 — Powered by Local Gemma 4</p>', unsafe_allow_html=True)
 with col_h2:
     st.markdown(f"<div style='text-align:right;color:#94a3b8;font-size:0.8rem;padding-top:14px'>{datetime.now().strftime('%m/%d %H:%M')}</div>", unsafe_allow_html=True)
@@ -544,17 +555,44 @@ with tab_settings:
 
 # Tab 2: AI 브리핑
 with tab_briefing:
-    st.info("심층 분석: Gemma 4 모델이 각 소스의 중요도를 평가하고 3줄 핵심 요약을 제공하는 인텔리전스 보고서입니다.")
-    col_f1, col_f2 = st.columns([2, 2])
-    with col_f1: 
+    st.info("심층 분석: Gemma 4 모델이 각 소스의 중요도를 평가하고 요점(Key Points)을 정리한 인텔리전스 보고서입니다.")
+    
+    # --- 상단 필터 바 ---
+    f_col1, f_col2, f_col3, f_col4 = st.columns([2, 2, 2, 1])
+    
+    with f_col1:
+        st.session_state.briefing_today_only = st.checkbox("오늘 수집된 정보만", value=st.session_state.briefing_today_only)
+    
+    with f_col2:
+        st.session_state.briefing_sort_by = st.selectbox(
+            "정렬 기준", 
+            options=["date", "importance"], 
+            format_func=lambda x: "최신순" if x == "date" else "중요도순",
+            index=0 if st.session_state.briefing_sort_by == "date" else 1,
+            key="sort_by_select"
+        )
+    
+    with f_col3:
+        # 감성 필터
         sentiment_options = {"positive": "긍정", "neutral": "중립", "negative": "부정"}
-        selected_labels = st.multiselect("감성 필터", list(sentiment_options.values()), default=list(sentiment_options.values()))
-        sentiment_filter = [k for k, v in sentiment_options.items() if v in selected_labels]
-    with col_f2:
-        min_importance = st.slider("최소 중요도", 0.0, 10.0, 3.0)
+        selected_sentiments = st.multiselect("감성 필터", list(sentiment_options.values()), default=list(sentiment_options.values()), key="sentiment_multiselect")
+        sentiment_filter = [k for k, v in sentiment_options.items() if v in selected_sentiments]
+
+    with f_col4:
+        # 태그 필터 초기화 버튼
+        if st.session_state.briefing_filter_tag:
+            if st.button("필터 초기화 🔄", use_container_width=True):
+                st.session_state.briefing_filter_tag = None
+                st.rerun()
+
+    if st.session_state.briefing_filter_tag:
+        st.info(f"선택된 태그 필터: **#{st.session_state.briefing_filter_tag}**")
 
     st.markdown("---")
-    filtered = [a for a in articles if a.get("sentiment", "neutral") in sentiment_filter and a.get("importance", 0) >= min_importance]
+    
+    # 필터링 적용 (감성 필터는 메모리에서 수동 필터링)
+    filtered = [a for a in articles if a.get("sentiment", "neutral") in sentiment_filter]
+    
     if not filtered:
         st.info("조건에 맞는 결과가 없습니다.")
     else:
@@ -563,8 +601,29 @@ with tab_briefing:
             thumbnail = art.get("thumbnail_url")
             img_tag = f'<img src="{thumbnail}" class="article-thumb" alt="thumbnail">' if thumbnail else ''
             importance = art.get("importance", 0.0)
+            
+            # 날짜 보완: published_at이 없으면 collected_at(수집일) 사용
             pub_date = art.get('published_at')
-            pub_date_str = pub_date.strftime("%Y-%m-%d %H:%M") if hasattr(pub_date, "strftime") else (pub_date or "날짜 정보 없음")
+            if pub_date:
+                date_label = "📅 발행일"
+                date_val = pub_date.strftime("%Y-%m-%d %H:%M") if hasattr(pub_date, "strftime") else str(pub_date)
+            else:
+                date_label = "📥 수집일"
+                coll_date = art.get('collected_at')
+                date_val = coll_date.strftime("%Y-%m-%d %H:%M") if hasattr(coll_date, "strftime") else str(coll_date)
+            
+            # Key Points (불릿포인트) 구성
+            key_points_html = ""
+            raw_points = art.get('key_points')
+            if raw_points:
+                points_list = raw_points.split('\n')
+                points_li = "".join([f"<li style='margin-bottom:4px;'>{p.strip()}</li>" for p in points_list if p.strip()])
+                key_points_html = f"""
+                <div style="margin-top: 10px; padding: 10px; background: #f8fafc; border-radius: 6px; border-left: 3px solid #cbd5e1;">
+                    <p style="font-size: 0.85rem; font-weight: 700; color: #475569; margin-bottom: 5px;">핵심 요점 (Key Points)</p>
+                    <ul style="font-size: 0.85rem; color: #334155; padding-left: 20px; margin: 0;">{points_li}</ul>
+                </div>
+                """
             
             st.html(f"""
             <div class="article-card {sentiment}" style="display: flex; gap: 20px; align-items: stretch;">
@@ -576,17 +635,27 @@ with tab_briefing:
                             <span class="badge-importance">⭐ {importance:.1f}</span>
                         </div>
                         <p class="article-summary">{art.get('summary', '요약 정보가 없습니다.')}</p>
-                        <div style="margin-top: 8px; margin-bottom: 8px;">
-                            {''.join([f'<span class="tag-badge">{t}</span>' for t in art.get('tags', []) if t and t != 'None'])}
-                        </div>
+                        {key_points_html}
                     </div>
-                    <div class="article-meta" style="font-size: 0.8rem; color: #94a3b8; display: flex; justify-content: space-between;">
+                    <div class="article-meta" style="font-size: 0.8rem; color: #94a3b8; display: flex; justify-content: space-between; margin-top: 12px;">
                         <span>🏢 {art.get('source')}</span>
-                        <span>🕒 {pub_date_str}</span>
+                        <span>{date_label}: {date_val}</span>
                     </div>
                 </div>
             </div>
             """)
+            
+            # 태그 버튼 (가로 정렬)
+            tags = art.get('tags', [])
+            if tags and tags[0] is not None:
+                tag_row = ""
+                # Streamlit 버튼을 개별적으로 배치
+                btn_cols = st.columns(min(len(tags), 8))
+                for idx, tag in enumerate(tags[:8]): # 최대 8개까지만 인터렉티브하게 표시
+                    if tag:
+                        if btn_cols[idx].button(f"#{tag}", key=f"tbtn_{art['id']}_{tag}", type="secondary"):
+                            st.session_state.briefing_filter_tag = tag
+                            st.rerun()
 
 # Tab 3: 지식 그래프
 with tab_graph:

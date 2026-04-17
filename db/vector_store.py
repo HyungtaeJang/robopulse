@@ -38,6 +38,7 @@ def _get_engine():
         try:
             with _engine.connect() as conn:
                 conn.execute(text("ALTER TABLE articles ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;"))
+                conn.execute(text("ALTER TABLE articles ADD COLUMN IF NOT EXISTS key_points TEXT;"))
                 
                 # 새 기능: youtube_sources 및 recommended_sources 테이블 생성
                 conn.execute(text("""
@@ -96,6 +97,14 @@ def _get_engine():
                     UPDATE articles 
                     SET is_processed = FALSE 
                     WHERE title !~ '[가-힣]' AND is_processed = TRUE;
+                """))
+
+                # [중요] 사용자의 요청에 따른 전체 재분석 트리거 (Key Points 생성을 위함)
+                # 만약 key_points가 NULL인 기사들이 있다면(기존 기사들), re-analysis를 위해 is_processed를 다시 FALSE로 만듭니다.
+                conn.execute(text("""
+                    UPDATE articles 
+                    SET is_processed = FALSE 
+                    WHERE key_points IS NULL AND is_processed = TRUE;
                 """))
                 
                 conn.commit()
@@ -210,6 +219,7 @@ def save_analysis_result(article_id: str, analysis) -> None:
         session.execute(text("""
             UPDATE articles
             SET summary = :summary,
+                key_points = :key_points,
                 sentiment = :sentiment,
                 importance = :importance,
                 is_processed = TRUE,
@@ -218,6 +228,7 @@ def save_analysis_result(article_id: str, analysis) -> None:
             WHERE id = :article_id
         """), {
             "summary": analysis.summary,
+            "key_points": "\n".join(getattr(analysis, 'key_points', [])),
             "sentiment": analysis.sentiment,
             "importance": analysis.importance_score,
             "translated_title": getattr(analysis, 'translated_title', None),
@@ -405,20 +416,40 @@ def get_all_relations() -> list[dict]:
         session.close()
 
 
-def get_latest_articles(limit: int = 20, min_importance: float = 0.0) -> list[dict]:
+def get_latest_articles(limit: int = 50, min_importance: float = 0.0, today_only: bool = False, tag_filter: str = None, sort_by: str = "date") -> list[dict]:
     """분석 완료된 최신 기사를 가져옵니다."""
     session = _get_session()
     try:
-        result = session.execute(text("""
-            SELECT a.id, a.title, a.url, a.source, a.summary, a.sentiment, a.importance, a.published_at, a.thumbnail_url,
+        where_clauses = ["a.is_processed = TRUE", "a.importance >= :min_imp"]
+        params = {"limit": limit, "min_imp": min_importance}
+
+        if today_only:
+            where_clauses.append("a.collected_at::date = CURRENT_DATE")
+            
+        where_sql = " AND ".join(where_clauses)
+        
+        # 태그 필터링 (HAVING 절에서 처리)
+        having_sql = ""
+        if tag_filter:
+            having_sql = "HAVING :tag = ANY(array_agg(t.category))"
+            params["tag"] = tag_filter
+
+        order_sql = "a.published_at DESC" if sort_by == "date" else "a.importance DESC, a.published_at DESC"
+
+        query = f"""
+            SELECT a.id, a.title, a.url, a.source, a.summary, a.key_points, a.sentiment, a.importance, 
+                   a.published_at, a.collected_at, a.thumbnail_url,
                    array_agg(t.category) AS tags
             FROM articles a
             LEFT JOIN tags t ON a.id = t.article_id
-            WHERE a.is_processed = TRUE AND a.importance >= :min_imp
+            WHERE {where_sql}
             GROUP BY a.id
-            ORDER BY a.published_at DESC
+            {having_sql}
+            ORDER BY {order_sql}
             LIMIT :limit
-        """), {"limit": limit, "min_imp": min_importance})
+        """
+        
+        result = session.execute(text(query), params)
         return [dict(row._mapping) for row in result.fetchall()]
     finally:
         session.close()
