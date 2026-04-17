@@ -184,6 +184,8 @@ if "briefing_today_only" not in st.session_state:
     st.session_state.briefing_today_only = False
 if "briefing_sort_by" not in st.session_state:
     st.session_state.briefing_sort_by = "date"
+if "system_status" not in st.session_state:
+    st.session_state.system_status = None
 
 # 전역 매니저에서 상태 읽어오기
 mgr = globals()["ANALYSIS_MANAGER"]
@@ -301,6 +303,36 @@ with st.sidebar:
         if st.button("새로고침", key="analysis_refresh"):
             st.rerun()
 
+    st.markdown("---")
+    st.markdown('<p style="font-size:0.85rem; font-weight:700; color:#475569; margin-bottom:10px;">시스템 제어</p>', unsafe_allow_html=True)
+    
+    if st.session_state.system_status:
+        st.success(st.session_state.system_status)
+        if st.button("상태 지우기", key="clear_status"):
+            st.session_state.system_status = None
+            st.rerun()
+
+    sc_col1, sc_col2 = st.columns(2)
+    with sc_col1:
+        if st.button("뉴스 수집", use_container_width=True, type="primary"):
+            if is_live:
+                with st.spinner("수집 중..."): job_fetch_news()
+                st.session_state.system_status = "뉴스 수집이 완료되었습니다."
+                st.rerun()
+    with sc_col2:
+        if st.button("영상 수집", use_container_width=True):
+            if is_live:
+                with st.spinner("수집 중..."): job_fetch_videos()
+                st.session_state.system_status = "영상 수집이 완료되었습니다."
+                st.rerun()
+    
+    if not mgr["active"]:
+        if st.button("AI 심층 분석 실행", use_container_width=True, type="primary"):
+            if is_live:
+                run_analysis_in_background()
+                st.session_state.system_status = "AI 분석을 시작합니다 (백그라운드)."
+                st.rerun()
+
     st.caption(f"Model: {LMS_MODEL_NAME.split('/')[-1]}")
 
 # ---- 메인 헤더 ----------------------------------------------
@@ -314,70 +346,9 @@ with col_h2:
 st.markdown("")
 
 # ---- 탭 구성 ------------------------------------------------
-tab_monitor, tab_briefing, tab_graph, tab_chat, tab_settings = st.tabs([
-    "자동화 모니터링", "AI 브리핑", "지식 그래프", "AI Chat", "설정 및 제어"
+tab_briefing, tab_graph, tab_chat, tab_settings = st.tabs([
+    "AI 브리핑", "지식 그래프", "AI Chat", "설정 및 제어"
 ])
-
-# Tab 1: 자동화 모니터링
-with tab_monitor:
-    st.info("수집 단계: 지정된 RSS 소스나 유튜브 채널에서 실시간으로 관련 데이터를 수집합니다.")
-    c1, c2, c3, c4 = st.columns(4)
-    for col, (label, val, unit) in zip([c1, c2, c3, c4], [
-        ("오늘 수집", stats["today_total"], "건"),
-        ("분석 완료", stats["today_processed"], "건"),
-        ("대기 중", stats["pending"], "건"),
-        ("누적 기사", stats["total"], "건")
-    ]):
-        with col:
-            st.markdown(f'<div class="metric-card"><div class="metric-value">{val}</div><div class="metric-label">{label} ({unit})</div></div>', unsafe_allow_html=True)
-
-    st.markdown("### 데이터 수집 현황")
-    if stats["sources"]:
-        import pandas as pd
-        df = pd.DataFrame(stats["sources"])
-        df.columns = ["소스", "수집량", "최근수집"]
-        st.dataframe(df, use_container_width=True, hide_index=True)
-    else:
-        st.info("수집된 데이터 소스가 없습니다.")
-
-    st.markdown("### 데이터 수집")
-    cb1, cb2 = st.columns(2)
-    with cb1:
-        if st.button("뉴스 수집 실행", use_container_width=True, type="primary"):
-            if is_live:
-                with st.spinner("뉴스 수집 중..."): job_fetch_news()
-                st.rerun()
-            else: st.warning("DB 연결이 필요합니다.")
-    with cb2:
-        if st.button("영상 수집 실행", use_container_width=True):
-            if is_live:
-                with st.spinner("영상 수집 중..."): job_fetch_videos()
-                st.rerun()
-            else: st.warning("DB 연결이 필요합니다.")
-                
-    st.markdown("### AI 분석")
-    ca1, ca2 = st.columns(2)
-    with ca1:
-        if mgr["active"]:
-            st.button("AI 분석 진행 중...", use_container_width=True, type="secondary", disabled=True)
-        else:
-            if st.button("미처리 데이터 AI 분석", use_container_width=True, type="primary"):
-                if is_live:
-                    run_analysis_in_background()
-                    st.toast("AI 분석을 백그라운드에서 시작합니다.")
-                    st.rerun()
-                else: 
-                    st.warning("DB 연결이 필요합니다.")
-    with ca2:
-        st.caption("수집은 되었으나 아직 AI 분석(요약, 엔티티 추출 등)이 완료되지 않은 기사들을 처리합니다.")
-
-    # 로그 섹션
-    log_label = "LOGS" if is_live else "파이프라인 로그 (데모)"
-    with st.expander(log_label, expanded=is_live):
-        if is_live:
-            st.info("상세 로그는 서버 터미널을 확인해 주세요.")
-        else:
-            st.code("[10:00:01] 뉴스 수집 시작...\n[10:02:15] 분석 완료 및 DB 저장", language="text")
 
 # Tab 5: 설정 및 제어
 with tab_settings:
@@ -553,8 +524,21 @@ with tab_settings:
                 st.error("DB가 연결되지 않았습니다.")
         st.markdown('</div>', unsafe_allow_html=True)
 
-# Tab 2: AI 브리핑
+# Tab 1: AI 브리핑
 with tab_briefing:
+    # 1. 상단 통계 메트릭
+    st.markdown("### 오늘의 통계")
+    c1, c2, c3, c4 = st.columns(4)
+    for col, (label, val, unit) in zip([c1, c2, c3, c4], [
+        ("오늘 수집", stats["today_total"], "건"),
+        ("분석 완료", stats["today_processed"], "건"),
+        ("대기 중", stats["pending"], "건"),
+        ("누적 기사", stats["total"], "건")
+    ]):
+        with col:
+            st.markdown(f'<div class="metric-card"><div class="metric-value">{val}</div><div class="metric-label">{label} ({unit})</div></div>', unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
     st.info("심층 분석: Gemma 4 모델이 각 소스의 중요도를 평가하고 요점(Key Points)을 정리한 인텔리전스 보고서입니다.")
     
     # --- 상단 필터 바 ---
@@ -656,6 +640,17 @@ with tab_briefing:
                         if btn_cols[idx].button(f"#{tag}", key=f"tbtn_{art['id']}_{tag}", type="secondary"):
                             st.session_state.briefing_filter_tag = tag
                             st.rerun()
+
+        # 3. 하단 데이터 수집 현황 (간결한 형태)
+        st.markdown("---")
+        with st.expander("📊 데이터 수집 상세 현황 (Source Wise)", expanded=False):
+            if stats["sources"]:
+                import pandas as pd
+                df = pd.DataFrame(stats["sources"])
+                df.columns = ["소스", "수집량", "최근수집"]
+                st.dataframe(df, use_container_width=True, hide_index=True)
+            else:
+                st.info("수집된 데이터 소스가 없습니다.")
 
 # Tab 3: 지식 그래프
 with tab_graph:
