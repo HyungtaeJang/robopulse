@@ -1,0 +1,130 @@
+import streamlit as st
+
+def render_tab_briefing(stats, articles):
+    # 1. 상단 통계 메트릭
+    st.markdown("### 오늘의 통계")
+    c1, c2, c3, c4 = st.columns(4)
+    for col, (label, val, unit) in zip([c1, c2, c3, c4], [
+        ("오늘 수집", stats["today_total"], "건"),
+        ("분석 완료", stats["today_processed"], "건"),
+        ("대기 중", stats["pending"], "건"),
+        ("누적 기사", stats["total"], "건")
+    ]):
+        with col:
+            st.markdown(f'<div class="metric-card"><div class="metric-value">{val}</div><div class="metric-label">{label} ({unit})</div></div>', unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # --- 상단 필터 바 ---
+    f_col1, f_col2, f_col3, f_col4 = st.columns([2, 2, 2, 1])
+    
+    with f_col1:
+        # checkbox state can be tricky if we use on_change=st.rerun, we must ensure it mutates session_state directly or uses key
+        st.session_state.briefing_today_only = st.checkbox(
+            "오늘 수집된 정보만", 
+            value=st.session_state.briefing_today_only
+        )
+    
+    with f_col2:
+        st.session_state.briefing_sort_by = st.selectbox(
+            "정렬 기준", 
+            options=["date", "importance"], 
+            format_func=lambda x: "최신순" if x == "date" else "중요도순",
+            index=0 if st.session_state.briefing_sort_by == "date" else 1,
+            key="sort_by_select"
+        )
+    
+    with f_col3:
+        # 감성 필터
+        sentiment_options = {"positive": "긍정", "neutral": "중립", "negative": "부정"}
+        selected_sentiments = st.multiselect("감성 필터", list(sentiment_options.values()), default=list(sentiment_options.values()), key="sentiment_multiselect")
+        sentiment_filter = [k for k, v in sentiment_options.items() if v in selected_sentiments]
+
+    with f_col4:
+        # 태그 필터 초기화 버튼
+        if st.session_state.briefing_filter_tag:
+            if st.button("필터 초기화 🔄", use_container_width=True):
+                st.session_state.briefing_filter_tag = None
+                st.rerun()
+
+    if st.session_state.briefing_filter_tag:
+        st.info(f"선택된 태그 필터: **#{st.session_state.briefing_filter_tag}**")
+
+    st.markdown("---")
+    
+    # 필터링 적용 (감성 필터는 메모리에서 수동 필터링)
+    filtered = [a for a in articles if a.get("sentiment", "neutral") in sentiment_filter]
+    
+    if not filtered:
+        st.info("조건에 맞는 결과가 없습니다.")
+    else:
+        for art in filtered:
+            sentiment = art.get("sentiment", "neutral")
+            thumbnail = art.get("thumbnail_url")
+            img_tag = f'<img src="{thumbnail}" class="article-thumb" alt="thumbnail">' if thumbnail else ''
+            importance = art.get("importance", 0.0)
+            
+            # 날짜 보완: published_at이 없으면 collected_at(수집일) 사용
+            pub_date = art.get('published_at')
+            if pub_date:
+                date_label = "📅 발행일"
+                date_val = pub_date.strftime("%Y-%m-%d %H:%M") if hasattr(pub_date, "strftime") else str(pub_date)
+            else:
+                date_label = "📥 수집일"
+                coll_date = art.get('collected_at')
+                date_val = coll_date.strftime("%Y-%m-%d %H:%M") if hasattr(coll_date, "strftime") else str(coll_date)
+            
+            # Key Points (불릿포인트) 구성
+            key_points_html = ""
+            raw_points = art.get('key_points')
+            if raw_points:
+                points_list = raw_points.split('\n')
+                points_li = "".join([f"<li style='margin-bottom:4px;'>{p.strip()}</li>" for p in points_list if p.strip()])
+                key_points_html = f"""
+                <div style="margin-top: 10px; padding: 10px; background: #f8fafc; border-radius: 6px; border-left: 3px solid #cbd5e1;">
+                    <p style="font-size: 0.85rem; font-weight: 700; color: #475569; margin-bottom: 5px;">핵심 요점 (Key Points)</p>
+                    <ul style="font-size: 0.85rem; color: #334155; padding-left: 20px; margin: 0;">{points_li}</ul>
+                </div>
+                """
+            
+            tags = art.get('tags', [])
+            tag_html = ""
+            if tags and tags[0] is not None:
+                valid_tags = [t for t in tags if t and t != 'None'][:8]
+                if valid_tags:
+                    tags_spans = "".join([f'<span class="tag-badge">#{tag}</span>' for tag in valid_tags])
+                    tag_html = f'<div style="margin-top: 5px;">{tags_spans}</div>'
+
+            st.html(f"""
+            <div class="article-card {sentiment}" style="display: flex; gap: 20px; align-items: stretch;">
+                {img_tag}
+                <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <a href="{art['url']}" target="_blank" class="article-title">{art['title']}</a>
+                            <span class="badge-importance">⭐ {importance:.1f}</span>
+                        </div>
+                        <p class="article-summary">{art.get('summary', '요약 정보가 없습니다.')}</p>
+                        {key_points_html}
+                    </div>
+                    <div class="article-meta" style="font-size: 0.8rem; color: #94a3b8; display: flex; flex-direction: column; justify-content: flex-end; margin-top: 12px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>🏢 {art.get('source')}</span>
+                            <span>{date_label}: {date_val}</span>
+                        </div>
+                        {tag_html}
+                    </div>
+                </div>
+            </div>
+            """)
+
+        # 3. 하단 데이터 수집 현황 (간결한 형태)
+        st.markdown("---")
+        with st.expander("📊 데이터 수집 상세 현황 (Source Wise)", expanded=False):
+            if stats["sources"]:
+                import pandas as pd
+                df = pd.DataFrame(stats["sources"])
+                df.columns = ["소스", "수집량", "최근수집"]
+                st.dataframe(df, use_container_width=True, hide_index=True)
+            else:
+                st.info("수집된 데이터 소스가 없습니다.")
