@@ -121,12 +121,15 @@ html, body, [class*="css"] { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
 
 /* 헤더 타이틀 */
 .hero-title {
-    font-size: 2.5rem; font-weight: 900; letter-spacing: -1px;미처리 데이터 분석이나, 데이터 리프레시 같은 기능은 사이드바에 있는게 맞을 것 같은데. (로그도 별로 보여줄게 없다면 굳이 UI로 있을 필요도 없을 것 같아)
-그리고 미처리 데이터 ai 분석 버튼이 동작 안하는것 같아. 
+    font-size: 2.5rem; font-weight: 900; letter-spacing: -1px;
+    color: #4338ca;
     background: linear-gradient(135deg, #4338ca 0%, #7c3aed 100%);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    background-clip: text; margin: 0;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 0;
 }
+
 .hero-sub { color: #64748b; font-size: 1rem; margin-top: 6px; font-weight: 500; }
 
 /* 사이드바 - 연그레이 테마 */
@@ -321,7 +324,6 @@ with st.sidebar:
         if st.button("새로고침", key="analysis_refresh"):
             st.rerun()
 
-    st.markdown("---")
     st.markdown('<p style="font-size:0.85rem; font-weight:700; color:#475569; margin-bottom:10px;">시스템 제어</p>', unsafe_allow_html=True)
     
     if st.session_state.system_status:
