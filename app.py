@@ -121,6 +121,8 @@ if "briefing_today_only" not in st.session_state:
     st.session_state.briefing_today_only = False
 if "briefing_sort_by" not in st.session_state:
     st.session_state.briefing_sort_by = "date"
+if "briefing_min_importance" not in st.session_state:
+    st.session_state.briefing_min_importance = 0.0
 if "system_status" not in st.session_state:
     st.session_state.system_status = None
 
@@ -153,7 +155,7 @@ if is_live:
     # 파라미터 기반 기사 로드
     articles = get_latest_articles(
         limit=50, 
-        min_importance=0.0, 
+        min_importance=st.session_state.briefing_min_importance, 
         today_only=st.session_state.briefing_today_only,
         tag_filter=st.session_state.briefing_filter_tag,
         sort_by=st.session_state.briefing_sort_by

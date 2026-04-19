@@ -16,7 +16,7 @@ def render_tab_briefing(stats, articles):
     st.markdown("<br>", unsafe_allow_html=True)
     
     # --- 상단 필터 바 ---
-    f_col1, f_col2, f_col3, f_col4 = st.columns([2, 2, 2, 1])
+    f_col1, f_col2, f_col3, f_col5, f_col4 = st.columns([2, 2, 2, 2, 1])
     
     with f_col1:
         # checkbox state can be tricky if we use on_change=st.rerun, we must ensure it mutates session_state directly or uses key
@@ -39,6 +39,15 @@ def render_tab_briefing(stats, articles):
         sentiment_options = {"positive": "긍정", "neutral": "중립", "negative": "부정"}
         selected_sentiments = st.multiselect("감성 필터", list(sentiment_options.values()), default=list(sentiment_options.values()), key="sentiment_multiselect")
         sentiment_filter = [k for k, v in sentiment_options.items() if v in selected_sentiments]
+
+    with f_col5:
+        # 중요도(별점) 필터
+        st.session_state.briefing_min_importance = st.slider(
+            "최소 별점(중요도)", 
+            min_value=0.0, max_value=10.0, step=0.5,
+            value=st.session_state.briefing_min_importance,
+            help="이 점수 이상의 기사만 표시합니다."
+        )
 
     with f_col4:
         # 태그 필터 초기화 버튼

@@ -424,7 +424,7 @@ def get_latest_articles(limit: int = 50, min_importance: float = 0.0, today_only
         params = {"limit": limit, "min_imp": min_importance}
 
         if today_only:
-            where_clauses.append("a.collected_at::date = CURRENT_DATE")
+            where_clauses.append("a.collected_at >= NOW() - INTERVAL '24 hours'")
             
         where_sql = " AND ".join(where_clauses)
         
