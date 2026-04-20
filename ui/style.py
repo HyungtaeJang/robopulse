@@ -69,29 +69,53 @@ html, body, [class*="css"] { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
 
 div[data-testid="stTab"] button { font-size: 1rem !important; font-weight: 600 !important; }
 
-/* AI Chat Input - Premium Glassmorphism */
-div[data-testid="stChatInput"] {
-    background-color: rgba(255, 255, 255, 0.6) !important;
-    backdrop-filter: blur(12px);
-    border-top: 1px solid rgba(226, 232, 240, 1);
-    border-top-left-radius: 28px !important;
-    border-top-right-radius: 28px !important;
-    padding: 1.5rem 0.5rem 2rem 0.5rem !important;
-    box-shadow: 0 -10px 25px rgba(0,0,0,0.03);
-}
-
-div[data-testid="stChatInput"] > div {
-    width: 100% !important;
+/* AI Chat & Bottom Interface - Premium Refinement */
+/* 채팅 입력창 중앙 정렬 및 박스 스타일 복원 (아웃라인 삭제) */
+[data-testid="stChatInput"] {
     max-width: 800px !important;
     margin: 0 auto !important;
-    background-color: transparent !important;
+    background-color: #ffffff !important;
+    border: none !important;
+    border-radius: 12px !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02) !important;
 }
 
-div[data-testid="stChatInput"] textarea {
-    border-radius: 12px !important;
-    background-color: #ffffff !important;
-    border: 1px solid #e2e8f0 !important;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+/* 하단 고정 영역(챗봇 컨테이너 등) 단일 레이어로 투명도/블러 처리 */
+[data-testid="stBottom"] {
+    background: rgba(255, 255, 255, 0.35) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.03) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.3) !important;
+    border-top-left-radius: 24px !important;
+    border-top-right-radius: 24px !important;
+    padding-top: 12px !important;
 }
+
+/* 이중 레이어 방지를 위해 하위 컨테이너 배경 투명화 */
+[data-testid="stBottom"] > * {
+    background: transparent !important;
+    padding-bottom: 0px !important;
+}
+
+/* 컴포넌트 전용 유틸리티 클래스 */
+.comp-header-box {
+    background-color: #f8fafc; padding: 20px; border-radius: 10px; 
+    border-left: 5px solid #3b82f6; margin-bottom: 20px; margin-top: 30px;
+}
+.comp-header-inner { display: flex; align-items: center; gap: 15px; }
+.comp-header-title { flex: 1; font-size: 18px; font-weight: bold; color: #1e293b; }
+.comp-header-vs { font-size: 24px; font-weight: bold; color: #3b82f6; padding: 0 10px; }
+
+.filter-alert-box {
+    background-color: #fffbeb; padding: 10px 15px; border-radius: 8px; 
+    border: 1px solid #fcd34d; margin-bottom: 15px; font-size: 14px; color: #92400e;
+}
+
+.stat-badge-container { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+.stat-badge { padding: 2px 10px; border-radius: 4px; font-size: 11px; border: 1px solid #e2e8f0; }
+.badge-test { color: #475569; background-color: #f8fafc; }
+.badge-sig { border-width: 1px; }
+.badge-metric { color: #334155; border-color: #cbd5e1; background-color: #f1f5f9; }
 </style>
     """, unsafe_allow_html=True)
