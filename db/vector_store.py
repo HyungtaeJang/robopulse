@@ -545,7 +545,6 @@ def add_news_source(name: str, url: str, label: str):
             INSERT INTO news_sources (name, url, label)
             VALUES (:name, :url, :label)
             ON CONFLICT (url) DO UPDATE SET name = EXCLUDED.name, label = EXCLUDED.label
-            ON CONFLICT (name) DO UPDATE SET url = EXCLUDED.url, label = EXCLUDED.label
         """), {"name": name, "url": url, "label": label})
         session.commit()
     finally:
