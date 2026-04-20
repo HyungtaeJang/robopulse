@@ -42,9 +42,14 @@ class RawArticle:
 def _extract_full_text_and_image(url: str) -> tuple[str, Optional[str]]:
     """URL에서 본문 텍스트와 대표 이미지(og:image) URL을 추출합니다 (BeautifulSoup4)."""
     try:
-        # requests -> httpx로 교체 및 프록시 설정 명시적 우회
-        with httpx.Client(proxy=None, trust_env=False, timeout=10.0) as client:
-            resp = client.get(url, headers={"User-Agent": "RoboPulse/1.0"})
+        # 리다이렉션 허용(follow_redirects=True) 및 브라우저 User-Agent 설정
+        with httpx.Client(proxy=None, trust_env=False, timeout=15.0, follow_redirects=True) as client:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7"
+            }
+            resp = client.get(url, headers=headers)
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "lxml")
             
@@ -53,6 +58,16 @@ def _extract_full_text_and_image(url: str) -> tuple[str, Optional[str]]:
         og_image = soup.find("meta", property="og:image")
         if og_image:
             thumbnail_url = og_image.get("content")
+        else:
+            # 폴백 1: twitter:image
+            twitter_image = soup.find("meta", property="twitter:image")
+            if twitter_image:
+                thumbnail_url = twitter_image.get("content")
+            else:
+                # 폴백 2: 기사 본문 내 첫 번째 이미지 (일정 크기 이상 가정)
+                first_img = soup.find("img", src=True)
+                if first_img:
+                    thumbnail_url = first_img.get("src")
 
         # 주요 본문 태그 우선 탐색
         for selector in ["article", "main", ".post-content", ".article-body", "#content"]:
