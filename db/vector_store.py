@@ -304,10 +304,10 @@ def semantic_search(query: str, top_k: int = 10) -> list[dict]:
     try:
         result = session.execute(text("""
             SELECT id, title, source, summary, sentiment, importance, published_at,
-                   1 - (embedding <=> :embedding::vector) AS similarity
+                   1 - (embedding <=> CAST(:embedding AS vector)) AS similarity
             FROM articles
             WHERE is_processed = TRUE AND embedding IS NOT NULL
-            ORDER BY embedding <=> :embedding::vector
+            ORDER BY embedding <=> CAST(:embedding AS vector)
             LIMIT :top_k
         """), {"embedding": embedding_str, "top_k": top_k})
 
