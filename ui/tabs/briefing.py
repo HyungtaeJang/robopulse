@@ -26,12 +26,11 @@ def render_tab_briefing(stats, articles):
         )
     
     with f_col2:
-        st.session_state.briefing_sort_by = st.selectbox(
+        st.selectbox(
             "정렬 기준", 
             options=["date", "importance"], 
             format_func=lambda x: "최신순" if x == "date" else "중요도순",
-            index=0 if st.session_state.briefing_sort_by == "date" else 1,
-            key="sort_by_select"
+            key="briefing_sort_by"
         )
     
     with f_col3:

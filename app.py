@@ -108,6 +108,20 @@ conn_status = check_all_connections()
 is_live = conn_status["postgres"]
 LMS_MODEL_NAME = sync_lms_model(conn_status)
 
+# ---- 세션 스테이트 초기화 및 분석 알림 --------------------------
+if "analysis_done_toast" not in st.session_state:
+    st.session_state.analysis_done_toast = False
+if "briefing_filter_tag" not in st.session_state:
+    st.session_state.briefing_filter_tag = None
+if "briefing_today_only" not in st.session_state:
+    st.session_state.briefing_today_only = True
+if "briefing_sort_by" not in st.session_state:
+    st.session_state.briefing_sort_by = "date"
+if "briefing_min_importance" not in st.session_state:
+    st.session_state.briefing_min_importance = 7.0
+if "system_status" not in st.session_state:
+    st.session_state.system_status = None
+
 # ---- 데모 샘플 데이터 (폴백용) -----------------------------------
 DEMO_ARTICLES = [
     {
@@ -135,20 +149,6 @@ st.set_page_config(
 # ---- CSS 디자인 --------------------------------------------
 from ui.style import apply_global_styles
 apply_global_styles()
-
-# ---- 세션 스테이트 초기화 및 분석 알림 --------------------------
-if "analysis_done_toast" not in st.session_state:
-    st.session_state.analysis_done_toast = False
-if "briefing_filter_tag" not in st.session_state:
-    st.session_state.briefing_filter_tag = None
-if "briefing_today_only" not in st.session_state:
-    st.session_state.briefing_today_only = True
-if "briefing_sort_by" not in st.session_state:
-    st.session_state.briefing_sort_by = "date"
-if "briefing_min_importance" not in st.session_state:
-    st.session_state.briefing_min_importance = 7.0
-if "system_status" not in st.session_state:
-    st.session_state.system_status = None
 
 # 전역 매니저에서 상태 읽어오기
 mgr = globals()["ANALYSIS_MANAGER"]

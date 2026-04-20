@@ -444,7 +444,11 @@ def get_latest_articles(limit: int = 50, min_importance: float = 0.0, today_only
             having_sql = "HAVING :tag = ANY(array_agg(t.category))"
             params["tag"] = tag_filter
 
-        order_sql = "a.published_at DESC" if sort_by == "date" else "a.importance DESC, a.published_at DESC"
+        # COALESCE를 사용하여 날짜 정보가 없는 기사도 적절한 위치에 정렬되도록 보완
+        if sort_by == "date":
+            order_sql = "COALESCE(a.published_at, a.collected_at) DESC"
+        else:
+            order_sql = "a.importance DESC, COALESCE(a.published_at, a.collected_at) DESC"
 
         query = f"""
             SELECT a.id, a.title, a.url, a.source, a.summary, a.key_points, a.sentiment, a.importance, 
