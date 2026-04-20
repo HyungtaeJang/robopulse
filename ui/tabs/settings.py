@@ -1,9 +1,9 @@
 import streamlit as st
 import os
 from db.vector_store import (
-    get_news_sources, add_news_source, toggle_news_source, delete_news_source,
     get_youtube_sources, add_youtube_source, toggle_youtube_source, delete_youtube_source,
-    get_recommended_sources, update_recommended_source_status, clear_all_data
+    get_recommended_sources, update_recommended_source_status, clear_all_data,
+    get_available_lms_models
 )
 from scheduler.pipeline_scheduler import update_analysis_schedule
 
@@ -141,6 +141,33 @@ def render_tab_settings(is_live):
             on_change=on_hour_change
         )
         
+        st.markdown("---")
+        st.markdown("#### Local LLM 모델 설정")
+        st.caption("AI 분석 및 챗에 사용할 모델을 선택합니다. LM Studio에 로드된 모델만 표시됩니다.")
+        
+        available_models = get_available_lms_models()
+        if available_models:
+            # 현재 세팅된 모델이 리스트에 없으면 첫 번째 선택
+            current_idx = 0
+            if st.session_state.get("lms_model") in available_models:
+                current_idx = available_models.index(st.session_state.lms_model)
+            
+            def on_model_change():
+                st.session_state.lms_model = st.session_state.model_selector
+                st.toast(f"✅ 사용 모델이 '{st.session_state.lms_model}'로 변경되었습니다.")
+
+            st.selectbox(
+                "로드된 모델 목록",
+                options=available_models,
+                index=current_idx,
+                key="model_selector",
+                on_change=on_model_change
+            )
+        else:
+            st.error("⚠️ 로드된 모델을 찾을 수 없습니다. LM Studio를 확인하세요.")
+            if st.button("모델 목록 새로고침"):
+                st.rerun()
+
         st.markdown("<br><br>", unsafe_allow_html=True)
         st.markdown('<div style="background-color: #fff1f2; padding: 20px; border-radius: 10px; border: 1px solid #fda4af;">', unsafe_allow_html=True)
         st.markdown("<h4 style='color: #be123c; margin-top: 0;'>데이터 초기화</h4>", unsafe_allow_html=True)

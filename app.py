@@ -56,7 +56,7 @@ def run_analysis_in_background():
         mgr["done"] = False
     
     # 분석 스레드 생성 (인자만 전달, 컨텍스트 주입 불필요)
-    thread = threading.Thread(target=job_analyze_unprocessed, args=(analysis_callback,))
+    thread = threading.Thread(target=job_analyze_unprocessed, args=(analysis_callback, LMS_MODEL_NAME))
     thread.daemon = True # 프로세스 종료 시 함께 종료
     thread.start()
 
@@ -67,7 +67,7 @@ try:
         init_news_sources, get_news_sources, add_news_source, toggle_news_source, delete_news_source,
         get_youtube_sources, add_youtube_source, toggle_youtube_source, delete_youtube_source,
         get_recommended_sources, update_recommended_source_status,
-        get_lms_client, semantic_search
+        get_lms_client, semantic_search, get_available_lms_models
     )
     from scheduler.pipeline_scheduler import (
         start_scheduler, get_scheduler_status, job_fetch_news, job_fetch_videos, 
@@ -82,7 +82,27 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-LMS_MODEL_NAME = os.getenv("LMS_MODEL_NAME", "lmstudio-community/gemma-4-26b-a4b-it")
+# ---- LM Studio 모델 설정 (Session State 기반 동적 관리) -----------
+if "lms_model" not in st.session_state:
+    # 1. 환경 변수 확인
+    env_model = os.getenv("LMS_MODEL_NAME")
+    
+    # 2. LM Studio 실제 로드된 모델 목록 조회
+    available_models = []
+    try:
+        available_models = get_available_lms_models()
+    except:
+        pass
+    
+    if env_model and env_model in available_models:
+        st.session_state.lms_model = env_model
+    elif available_models:
+        st.session_state.lms_model = available_models[0]
+    else:
+        # 폴백: 환경변수 우선, 없으면 하드코딩
+        st.session_state.lms_model = env_model or "supergemma4-26b-uncensored-mlx-v2"
+
+LMS_MODEL_NAME = st.session_state.lms_model
 
 # ---- 데모 샘플 데이터 (폴백용) -----------------------------------
 DEMO_ARTICLES = [

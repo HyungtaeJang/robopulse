@@ -71,6 +71,7 @@ def analyze_article(
     title: str,
     content: str,
     source: str = "",
+    model_name: Optional[str] = None,
     max_content_chars: int = 6000,
 ) -> Optional[ArticleAnalysis]:
     """
@@ -102,7 +103,7 @@ def analyze_article(
         json_schema = ArticleAnalysis.model_json_schema()
         
         response = client.chat.completions.create(
-            model=LMS_MODEL,
+            model=model_name or LMS_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},

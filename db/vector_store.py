@@ -388,13 +388,23 @@ def check_all_connections() -> dict:
     # 3. LM Studio
     try:
         client = get_lms_client()
-        # 가벼운 모델 리스트 조회로 테스트
         client.models.list()
         results["lms"] = True
     except Exception:
         pass
 
     return results
+
+
+def get_available_lms_models() -> list[str]:
+    """LM Studio에서 현재 로드되어 사용 가능한 모델 목록을 가져옵니다."""
+    try:
+        client = get_lms_client()
+        models = client.models.list()
+        return [m.id for m in models.data]
+    except Exception as e:
+        logger.warning(f"LM Studio 모델 목록 가저오기 실패: {e}")
+        return []
 
 
 def get_all_relations() -> list[dict]:

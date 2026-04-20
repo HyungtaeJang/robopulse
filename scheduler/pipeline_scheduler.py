@@ -46,7 +46,7 @@ def job_fetch_news():
         logger.error(f"❌ [뉴스 파이프라인] 오류: {e}")
         raise
 
-def job_analyze_unprocessed(progress_callback=None):
+def job_analyze_unprocessed(progress_callback=None, model_name=None):
     """뉴스 수집 없이 DB에 저장된 미처리 기사들만 골라 LLM 분석을 수행합니다."""
     from engine.gemma_worker import analyze_article
     from engine.graph_builder import add_analysis_to_graph
@@ -71,6 +71,7 @@ def job_analyze_unprocessed(progress_callback=None):
                 title=article["title"],
                 content=article["content"],
                 source=article["source"],
+                model_name=model_name,
             )
             if analysis:
                 save_analysis_result(article["id"], analysis)
