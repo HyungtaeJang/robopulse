@@ -137,7 +137,7 @@ def render_tab_settings(is_live):
         st.selectbox(
             "분석 시작 시간 (0~23시)", 
             options=list(range(24)), 
-            format_func=lambda x: f"매일 {x:04d}시 30분",
+            format_func=lambda x: f"매일 {x:02d}시 30분",
             key="analysis_hour",
             on_change=on_hour_change
         )

@@ -146,7 +146,7 @@ if "briefing_today_only" not in st.session_state:
 if "briefing_sort_by" not in st.session_state:
     st.session_state.briefing_sort_by = "date"
 if "briefing_min_importance" not in st.session_state:
-    st.session_state.briefing_min_importance = 0.0
+    st.session_state.briefing_min_importance = 7.0
 if "system_status" not in st.session_state:
     st.session_state.system_status = None
 
