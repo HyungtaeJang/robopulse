@@ -13,7 +13,7 @@ from typing import Optional
 import feedparser
 import httpx
 from bs4 import BeautifulSoup
-from dateutil import parser as dateparser
+from urllib.parse import urljoin
 from dotenv import load_dotenv
 
 from engine.deduplicator import check_and_mark
@@ -47,27 +47,39 @@ def _extract_full_text_and_image(url: str) -> tuple[str, Optional[str]]:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-                "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7"
+                "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Referer": "https://news.google.com/" # 구글 뉴스 유입 위장
             }
             resp = client.get(url, headers=headers)
             resp.raise_for_status()
+            final_url = str(resp.url)
             soup = BeautifulSoup(resp.text, "lxml")
             
-        # 대표 이미지(og:image) 추출
+        # 대표 이미지 추출 (순차적 탐색)
         thumbnail_url = None
-        og_image = soup.find("meta", property="og:image")
-        if og_image:
-            thumbnail_url = og_image.get("content")
-        else:
-            # 폴백 1: twitter:image
-            twitter_image = soup.find("meta", property="twitter:image")
-            if twitter_image:
-                thumbnail_url = twitter_image.get("content")
-            else:
-                # 폴백 2: 기사 본문 내 첫 번째 이미지 (일정 크기 이상 가정)
-                first_img = soup.find("img", src=True)
-                if first_img:
-                    thumbnail_url = first_img.get("src")
+        
+        # 1. Meta Tags (og, twitter, generic)
+        for attr in ["property", "name"]:
+            for tag_val in ["og:image", "twitter:image", "image", "thumbnail"]:
+                meta = soup.find("meta", {attr: tag_val})
+                if meta and meta.get("content"):
+                    thumbnail_url = meta.get("content")
+                    break
+            if thumbnail_url: break
+            
+        # 2. Body First Image (if meta fails)
+        if not thumbnail_url:
+            for selector in ["article", "main", ".post-content", ".article-body", "#content"]:
+                container = soup.select_one(selector)
+                if container:
+                    img = container.find("img", src=True)
+                    if img:
+                        thumbnail_url = img.get("src")
+                        break
+
+        # 상대 경로 보정
+        if thumbnail_url and not thumbnail_url.startswith(("http://", "https://")):
+            thumbnail_url = urljoin(final_url, thumbnail_url)
 
         # 주요 본문 태그 우선 탐색
         for selector in ["article", "main", ".post-content", ".article-body", "#content"]:
