@@ -41,6 +41,9 @@ class RawArticle:
 # ---- 본문 추출 ---------------------------------------------
 def _extract_full_text_and_image(url: str) -> tuple[str, Optional[str]]:
     """URL에서 본문 텍스트와 대표 이미지(og:image) URL을 추출합니다 (BeautifulSoup4)."""
+    # 제외할 이미지 패턴 (구글 서비스 아이콘, 로고 등)
+    IMAGE_BLACKLIST = ["googleusercontent.com", "favicon", "logo", "google_news", "default_pic", "white_g.png", "logo-google"]
+
     try:
         # 리다이렉션 허용(follow_redirects=True) 및 브라우저 User-Agent 설정
         with httpx.Client(proxy=None, trust_env=False, timeout=15.0, follow_redirects=True) as client:
@@ -55,6 +58,18 @@ def _extract_full_text_and_image(url: str) -> tuple[str, Optional[str]]:
             final_url = str(resp.url)
             soup = BeautifulSoup(resp.text, "lxml")
             
+        def is_valid_image(img_url: str) -> bool:
+            """이미지가 유효한 기사 이미지인지 체크 (로고/아이콘 제외)"""
+            if not img_url: return False
+            low_url = img_url.lower()
+            # 블랙리스트 포함 여부 확인
+            if any(p in low_url for p in IMAGE_BLACKLIST):
+                return False
+            # 너무 작은 이미지나 아이콘 확장자 제외 (단순화)
+            if low_url.endswith((".ico", ".gif")):
+                return False
+            return True
+
         # 대표 이미지 추출 (순차적 탐색)
         thumbnail_url = None
         
@@ -63,21 +78,28 @@ def _extract_full_text_and_image(url: str) -> tuple[str, Optional[str]]:
             for tag_val in ["og:image", "twitter:image", "image", "thumbnail"]:
                 meta = soup.find("meta", {attr: tag_val})
                 if meta and meta.get("content"):
-                    thumbnail_url = meta.get("content")
-                    break
+                    candidate = meta.get("content")
+                    if is_valid_image(candidate):
+                        thumbnail_url = candidate
+                        break
             if thumbnail_url: break
             
-        # 2. Body First Image (if meta fails)
+        # 2. Body First Image (if meta fails or is invalid)
         if not thumbnail_url:
             for selector in ["article", "main", ".post-content", ".article-body", "#content"]:
                 container = soup.select_one(selector)
                 if container:
-                    img = container.find("img", src=True)
-                    if img:
-                        thumbnail_url = img.get("src")
-                        break
+                    # 모든 이미지를 검사하여 유효한 첫 번째 이미지를 선택
+                    imgs = container.find_all("img", src=True)
+                    for img in imgs:
+                        src = img.get("src")
+                        abs_src = urljoin(final_url, src)
+                        if is_valid_image(abs_src):
+                            thumbnail_url = abs_src
+                            break
+                    if thumbnail_url: break
 
-        # 상대 경로 보정
+        # 상대 경로 보정 (위에서 안 되었을 경우 대비)
         if thumbnail_url and not thumbnail_url.startswith(("http://", "https://")):
             thumbnail_url = urljoin(final_url, thumbnail_url)
 
