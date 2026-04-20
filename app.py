@@ -82,27 +82,31 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ---- LM Studio 모델 설정 (Session State 기반 동적 관리) -----------
-if "lms_model" not in st.session_state:
-    # 1. 환경 변수 확인
-    env_model = os.getenv("LMS_MODEL_NAME")
-    
-    # 2. LM Studio 실제 로드된 모델 목록 조회
+# ---- LM Studio 모델 설정 (서버 로드 모델 우선 감지) -----------
+def sync_lms_model(conn_status):
+    # 실제 서버에서 로드된 모델 목록 가져오기
     available_models = []
-    try:
-        available_models = get_available_lms_models()
-    except:
-        pass
+    if conn_status.get("lms"):
+        try:
+            available_models = get_available_lms_models()
+        except:
+            pass
     
-    if env_model and env_model in available_models:
-        st.session_state.lms_model = env_model
-    elif available_models:
-        st.session_state.lms_model = available_models[0]
-    else:
-        # 폴백: 환경변수 우선, 없으면 하드코딩
-        st.session_state.lms_model = env_model or "supergemma4-26b-uncensored-mlx-v2"
+    # 1. 세션에 모델이 없거나, 있는데 현재 서버 목록에는 없는 경우 (서버에서 모델 교체 시)
+    if "lms_model" not in st.session_state or (available_models and st.session_state.lms_model not in available_models):
+        if available_models:
+            # 서버에 로드된 모델 중 첫 번째를 기본값으로 사용
+            st.session_state.lms_model = available_models[0]
+        else:
+            # 서버에 로드된 게 없으면 환경변수 또는 하드코딩 폴백
+            st.session_state.lms_model = os.getenv("LMS_MODEL_NAME", "supergemma4-26b-uncensored-mlx-v2")
+            
+    return st.session_state.lms_model
 
-LMS_MODEL_NAME = st.session_state.lms_model
+# ---- 데이터 로드 및 초기화 ------------------------------------
+conn_status = check_all_connections()
+is_live = conn_status["postgres"]
+LMS_MODEL_NAME = sync_lms_model(conn_status)
 
 # ---- 데모 샘플 데이터 (폴백용) -----------------------------------
 DEMO_ARTICLES = [
@@ -155,10 +159,6 @@ if mgr["done"] and not st.session_state.analysis_done_toast:
     st.session_state.analysis_done_toast = True
 elif not mgr["done"]:
     st.session_state.analysis_done_toast = False
-
-# ---- 데이터 로드 및 초기화 ------------------------------------
-conn_status = check_all_connections()
-is_live = conn_status["postgres"]
 
 # DB 초기화 (뉴스 소스 테이블 등)
 if is_live:
