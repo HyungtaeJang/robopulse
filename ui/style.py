@@ -71,28 +71,27 @@ div[data-testid="stTab"] button { font-size: 1rem !important; font-weight: 600 !
 
 /* AI Chat Input - Premium Glassmorphism */
 div[data-testid="stChatInput"] {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: rgba(255, 255, 255, 0.7) !important;
-    backdrop-filter: blur(15px) saturate(180%);
-    -webkit-backdrop-filter: blur(15px) saturate(180%);
-    border-top: 1px solid rgba(203, 213, 225, 0.5);
-    border-top-left-radius: 32px !important;
-    border-top-right-radius: 32px !important;
-    padding: 20px 10% 40px 10% !important;
-    z-index: 1000;
+    background-color: rgba(255, 255, 255, 0.6) !important;
+    backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(226, 232, 240, 1);
+    border-top-left-radius: 28px !important;
+    border-top-right-radius: 28px !important;
+    padding: 1.5rem 0.5rem 2rem 0.5rem !important;
+    box-shadow: 0 -10px 25px rgba(0,0,0,0.03);
 }
 
 div[data-testid="stChatInput"] > div {
+    width: 100% !important;
     max-width: 800px !important;
     margin: 0 auto !important;
+    background-color: transparent !important;
 }
 
 div[data-testid="stChatInput"] textarea {
-    border-radius: 16px !important;
-    border: 1px solid rgba(203, 213, 225, 0.8) !important;
+    border-radius: 12px !important;
+    background-color: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.05);
 }
 </style>
     """, unsafe_allow_html=True)
