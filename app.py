@@ -142,7 +142,7 @@ if "analysis_done_toast" not in st.session_state:
 if "briefing_filter_tag" not in st.session_state:
     st.session_state.briefing_filter_tag = None
 if "briefing_today_only" not in st.session_state:
-    st.session_state.briefing_today_only = False
+    st.session_state.briefing_today_only = True
 if "briefing_sort_by" not in st.session_state:
     st.session_state.briefing_sort_by = "date"
 if "briefing_min_importance" not in st.session_state:
