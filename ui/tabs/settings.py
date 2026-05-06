@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 from db.vector_store import (
+    get_news_sources, add_news_source, toggle_news_source, delete_news_source,
     get_youtube_sources, add_youtube_source, toggle_youtube_source, delete_youtube_source,
     get_recommended_sources, update_recommended_source_status, clear_all_data,
     get_available_lms_models, get_system_setting, set_system_setting
