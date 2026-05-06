@@ -132,7 +132,11 @@ def analyze_article(
     except json.JSONDecodeError as e:
         logger.error(f"JSON 파싱 오류: {e}")
     except Exception as e:
-        logger.error(f"LLM 호출 오류: {e}")
+        err_msg = str(e)
+        logger.error(f"LLM 호출 오류: {err_msg}")
+        # 치명적 오류 (모델 로드 실패 등) 감지 시 예외 상위로 전파
+        if "Failed to load model" in err_msg or "insufficient system resources" in err_msg:
+            raise RuntimeError(f"FATAL_LLM_ERROR: {err_msg}")
 
     return None
 

@@ -65,13 +65,18 @@ def job_analyze_unprocessed(progress_callback=None, model_name=None):
         
         # 모델 자동 감지 로직 (scheduler 호출 시 대비)
         if not model_name:
-            try:
-                models = get_available_lms_models()
-                if models:
-                    model_name = models[0] # 첫 번째 사용 가능한 모델 선택
-                    logger.info(f"자동 감지된 모델 사용: {model_name}")
-            except:
-                pass
+            # 1순위: DB에 저장된 활성 모델 (app.py에서 동기화됨)
+            model_name = get_system_setting("active_lms_model")
+            
+            # 2순위: DB에 없으면 서버 로드 모델 중 첫 번째
+            if not model_name:
+                try:
+                    models = get_available_lms_models()
+                    if models:
+                        model_name = models[0]
+                        logger.info(f"자동 감지된 모델 사용: {model_name}")
+                except:
+                    pass
 
         unprocessed = get_unprocessed_articles(limit=limit)
         if not unprocessed:
@@ -84,22 +89,32 @@ def job_analyze_unprocessed(progress_callback=None, model_name=None):
         logger.info(f"LLM 분석 대상: {total}건 (모델: {model_name or 'Default'})")
         
         success_count = 0
+        error_count = 0
         for i, article in enumerate(unprocessed, 1):
-            analysis = analyze_article(
-                title=article["title"],
-                content=article["content"],
-                source=article["source"],
-                model_name=model_name,
-            )
-            if analysis:
-                save_analysis_result(article["id"], analysis)
-                add_analysis_to_graph(
-                    article_id=article["id"],
-                    entities=[e.model_dump() for e in analysis.entities],
-                    relations=[r.model_dump() for r in analysis.relations],
+            try:
+                analysis = analyze_article(
+                    title=article["title"],
+                    content=article["content"],
+                    source=article["source"],
+                    model_name=model_name,
                 )
-                success_count += 1
-            
+                if analysis:
+                    save_analysis_result(article["id"], analysis)
+                    add_analysis_to_graph(
+                        article_id=article["id"],
+                        entities=[e.model_dump() for e in analysis.entities],
+                        relations=[r.model_dump() for r in analysis.relations],
+                    )
+                    success_count += 1
+                else:
+                    error_count += 1
+            except RuntimeError as re:
+                if "FATAL_LLM_ERROR" in str(re):
+                    logger.error(f"🛑 [치명적 오류] 분석을 중단합니다: {re}")
+                    _log_pipeline(source="analysis", status="failure", error_msg=f"치명적 오류로 중단: {re}")
+                    if progress_callback: progress_callback(-1, 0)
+                    return # 즉시 종료
+
             # 콜백을 통해 실시간 진행률 보고 (현재 수, 전체 수)
             if progress_callback:
                 progress_callback(i, total)

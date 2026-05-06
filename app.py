@@ -100,6 +100,11 @@ def sync_lms_model(conn_status):
         else:
             # 서버에 로드된 게 없으면 환경변수 또는 하드코딩 폴백
             st.session_state.lms_model = os.getenv("LMS_MODEL_NAME", "supergemma4-26b-uncensored-mlx-v2")
+    
+    # 2. 결정된 모델명을 DB에 동기화 (스케줄러에서 동일한 모델을 쓰도록 함)
+    if is_live:
+        from db.vector_store import set_system_setting
+        set_system_setting("active_lms_model", st.session_state.lms_model)
             
     return st.session_state.lms_model
 
