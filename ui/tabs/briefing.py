@@ -84,10 +84,12 @@ def render_tab_briefing(stats, articles):
             # 날짜 보완: published_at이 없으면 collected_at(수집일) 사용
             pub_date = art.get('published_at')
             if pub_date:
-                date_label = "📅 발행일"
+                # 발행일이 있는 경우 (📅 아이콘으로 강조)
+                date_label = "📅 발행"
                 date_val = pub_date.strftime("%Y-%m-%d %H:%M") if hasattr(pub_date, "strftime") else str(pub_date)
             else:
-                date_label = "📥 수집일"
+                # 없는 경우 수집일 표시
+                date_label = "📥 수집"
                 coll_date = art.get('collected_at')
                 date_val = coll_date.strftime("%Y-%m-%d %H:%M") if hasattr(coll_date, "strftime") else str(coll_date)
             

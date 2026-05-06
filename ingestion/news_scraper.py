@@ -12,6 +12,7 @@ from typing import Optional
 
 import feedparser
 import httpx
+import dateparser
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from dotenv import load_dotenv
