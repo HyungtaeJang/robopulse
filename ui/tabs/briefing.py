@@ -19,19 +19,22 @@ def render_tab_briefing(stats, articles):
     f_col1, f_col2, f_col3, f_col5, f_col4 = st.columns([2, 2, 2, 2, 1])
     
     with f_col1:
-        # checkbox state can be tricky if we use on_change=st.rerun, we must ensure it mutates session_state directly or uses key
-        st.session_state.briefing_today_only = st.checkbox(
-            "오늘 수집된 정보만", 
-            value=st.session_state.briefing_today_only
-        )
+        # 체크박스 변경 시 즉시 반영을 위해 value와 session_state 비교 후 rerun
+        t_only = st.checkbox("오늘 수집된 정보만", value=st.session_state.briefing_today_only)
+        if t_only != st.session_state.briefing_today_only:
+            st.session_state.briefing_today_only = t_only
+            st.rerun()
     
     with f_col2:
+        prev_sort = st.session_state.briefing_sort_by
         st.selectbox(
             "정렬 기준", 
             options=["date", "importance"], 
             format_func=lambda x: "최신순" if x == "date" else "중요도순",
             key="briefing_sort_by"
         )
+        if st.session_state.briefing_sort_by != prev_sort:
+            st.rerun()
     
     with f_col3:
         # 감성 필터
@@ -40,13 +43,16 @@ def render_tab_briefing(stats, articles):
         sentiment_filter = [k for k, v in sentiment_options.items() if v in selected_sentiments]
 
     with f_col5:
-        # 중요도(별점) 필터
+        # 슬라이더 변경 시 즉시 반영
+        prev_imp = st.session_state.briefing_min_importance
         st.session_state.briefing_min_importance = st.slider(
             "최소 별점(중요도)", 
             min_value=0.0, max_value=10.0, step=0.5,
             value=st.session_state.briefing_min_importance,
             help="이 점수 이상의 기사만 표시합니다."
         )
+        if st.session_state.briefing_min_importance != prev_imp:
+            st.rerun()
 
     with f_col4:
         # 태그 필터 초기화 버튼
@@ -64,7 +70,10 @@ def render_tab_briefing(stats, articles):
     filtered = [a for a in articles if a.get("sentiment", "neutral") in sentiment_filter]
     
     if not filtered:
-        st.info("조건에 맞는 결과가 없습니다.")
+        if st.session_state.briefing_today_only and stats["pending"] > 0:
+            st.warning(f"💡 현재 **{stats['pending']}건**의 데이터가 분석 대기 중입니다. 분석이 완료되면 여기에 표시됩니다.")
+        else:
+            st.info("조건에 맞는 결과가 없습니다.")
     else:
         for art in filtered:
             sentiment = art.get("sentiment", "neutral")
