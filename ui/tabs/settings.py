@@ -1,10 +1,9 @@
 import streamlit as st
 import os
 from db.vector_store import (
-    get_news_sources, add_news_source, toggle_news_source, delete_news_source,
     get_youtube_sources, add_youtube_source, toggle_youtube_source, delete_youtube_source,
     get_recommended_sources, update_recommended_source_status, clear_all_data,
-    get_available_lms_models
+    get_available_lms_models, get_system_setting, set_system_setting
 )
 from scheduler.pipeline_scheduler import update_analysis_schedule
 
@@ -140,6 +139,25 @@ def render_tab_settings(is_live):
             format_func=lambda x: f"매일 {x:02d}시 30분",
             key="analysis_hour",
             on_change=on_hour_change
+        )
+        
+        # --- 추가된 기능: 분석 배치 크기 설정 ---
+        st.markdown("<br>", unsafe_allow_html=True)
+        current_batch_limit = int(get_system_setting("analysis_batch_limit", "100"))
+        
+        def on_batch_limit_change():
+            new_limit = st.session_state.analysis_batch_limit_input
+            set_system_setting("analysis_batch_limit", str(new_limit))
+            st.toast(f"✅ AI 분석 배치 크기가 {new_limit}건으로 변경되었습니다.")
+
+        st.number_input(
+            "AI 분석 배치 크기 (한 번에 분석할 개수)",
+            min_value=1, max_value=1000,
+            value=current_batch_limit,
+            step=10,
+            key="analysis_batch_limit_input",
+            on_change=on_batch_limit_change,
+            help="수동/자동 분석 시 한 번에 처리할 기사의 최대 개수입니다."
         )
         
         st.markdown("---")

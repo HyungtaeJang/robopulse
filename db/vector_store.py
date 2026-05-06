@@ -107,6 +107,21 @@ def _get_engine():
                     WHERE key_points IS NULL AND is_processed = TRUE;
                 """))
                 
+                # 새 기능: 시스템 설정 테이블 생성
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS system_settings (
+                        key TEXT PRIMARY KEY,
+                        value TEXT
+                    );
+                """))
+                
+                # 초기 설정값 삽입
+                conn.execute(text("""
+                    INSERT INTO system_settings (key, value)
+                    VALUES ('analysis_batch_limit', '100')
+                    ON CONFLICT (key) DO NOTHING;
+                """))
+                
                 conn.commit()
         except Exception as e:
             logger.warning(f"DB 마이그레이션/백필 실패: {e}")
@@ -317,17 +332,50 @@ def semantic_search(query: str, top_k: int = 10) -> list[dict]:
         session.close()
 
 
-def get_unprocessed_articles(limit: int = 50) -> list[dict]:
+def get_system_setting(key: str, default: str = None) -> str:
+    """시스템 설정값을 가져옵니다."""
+    session = _get_session()
+    try:
+        result = session.execute(text("SELECT value FROM system_settings WHERE key = :key"), {"key": key})
+        row = result.fetchone()
+        return row[0] if row else default
+    except Exception:
+        return default
+    finally:
+        session.close()
+
+
+def set_system_setting(key: str, value: str) -> None:
+    """시스템 설정값을 저장합니다."""
+    session = _get_session()
+    try:
+        session.execute(text("""
+            INSERT INTO system_settings (key, value)
+            VALUES (:key, :value)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        """), {"key": key, "value": str(value)})
+        session.commit()
+    except Exception as e:
+        logger.error(f"설정 저장 실패: {e}")
+        session.rollback()
+    finally:
+        session.close()
+
+
+def get_unprocessed_articles(limit: int = 100) -> list[dict]:
     """LLM 분석이 아직 안 된 기사 목록을 반환합니다."""
     session = _get_session()
     try:
-        result = session.execute(text("""
+        query = """
             SELECT id, title, content, source
             FROM articles
             WHERE is_processed = FALSE
             ORDER BY collected_at ASC
-            LIMIT :limit
-        """), {"limit": limit})
+        """
+        if limit is not None:
+            query += " LIMIT :limit"
+        
+        result = session.execute(text(query), {"limit": limit} if limit is not None else {})
         return [dict(row._mapping) for row in result.fetchall()]
     finally:
         session.close()

@@ -50,13 +50,30 @@ def job_analyze_unprocessed(progress_callback=None, model_name=None):
     """뉴스 수집 없이 DB에 저장된 미처리 기사들만 골라 LLM 분석을 수행합니다."""
     from engine.gemma_worker import analyze_article
     from engine.graph_builder import add_analysis_to_graph
-    from db.vector_store import get_unprocessed_articles, save_analysis_result
+    from db.vector_store import (
+        get_unprocessed_articles, save_analysis_result, 
+        get_system_setting, get_available_lms_models
+    )
     
     logger.info("🤖 [미처리 데이터 분석] 시작")
     start = datetime.now()
     
     try:
-        unprocessed = get_unprocessed_articles(limit=50)
+        # DB에서 설정된 배치 제한 읽기 (기본 100)
+        limit_str = get_system_setting("analysis_batch_limit", "100")
+        limit = int(limit_str) if limit_str and limit_str.isdigit() else 100
+        
+        # 모델 자동 감지 로직 (scheduler 호출 시 대비)
+        if not model_name:
+            try:
+                models = get_available_lms_models()
+                if models:
+                    model_name = models[0] # 첫 번째 사용 가능한 모델 선택
+                    logger.info(f"자동 감지된 모델 사용: {model_name}")
+            except:
+                pass
+
+        unprocessed = get_unprocessed_articles(limit=limit)
         if not unprocessed:
             logger.info("분석할 미처리 기사가 없습니다.")
             if progress_callback:
@@ -64,8 +81,9 @@ def job_analyze_unprocessed(progress_callback=None, model_name=None):
             return
 
         total = len(unprocessed)
-        logger.info(f"LLM 분석 대상: {total}건")
+        logger.info(f"LLM 분석 대상: {total}건 (모델: {model_name or 'Default'})")
         
+        success_count = 0
         for i, article in enumerate(unprocessed, 1):
             analysis = analyze_article(
                 title=article["title"],
@@ -80,15 +98,27 @@ def job_analyze_unprocessed(progress_callback=None, model_name=None):
                     entities=[e.model_dump() for e in analysis.entities],
                     relations=[r.model_dump() for r in analysis.relations],
                 )
+                success_count += 1
             
             # 콜백을 통해 실시간 진행률 보고 (현재 수, 전체 수)
             if progress_callback:
                 progress_callback(i, total)
         
         elapsed = (datetime.now() - start).total_seconds()
-        logger.info(f"✅ [분석 완료] {total}건 처리됨 ({elapsed:.1f}초)")
+        logger.info(f"✅ [분석 완료] {success_count}/{total}건 처리됨 ({elapsed:.1f}초)")
+        
+        # 파이프라인 로그 기록
+        _log_pipeline(
+            source="analysis", 
+            status="success", 
+            fetched=total, 
+            saved=success_count,
+            skipped=total - success_count
+        )
+        
     except Exception as e:
         logger.error(f"❌ [분석 오류] {e}")
+        _log_pipeline(source="analysis", status="failure", error_msg=str(e))
         if progress_callback:
             progress_callback(-1, 0) # 오류 발생 신호
 
