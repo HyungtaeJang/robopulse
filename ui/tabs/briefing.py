@@ -16,15 +16,15 @@ def render_tab_briefing(stats, articles):
     st.markdown("<br>", unsafe_allow_html=True)
     
     # --- 시맨틱 검색 바 ---
-    search_query = st.text_input("🔍 시맨틱 뉴스 검색", placeholder="예: Figure AI의 최신 행보, 휴머노이드 관절 기술, 엔비디아의 로봇 칩셋...", help="AI가 문맥을 이해하여 가장 관련성 높은 기사를 찾아줍니다.")
+    search_query = st.text_input("뉴스 검색", placeholder="관심 키워드 또는 궁금한 내용을 입력하세요...", help="AI가 문맥을 이해하여 가장 관련성 높은 기사를 찾아줍니다.")
     
     if search_query:
         from db.vector_store import semantic_search
-        with st.spinner(f"'{search_query}'와(과) 관련된 기사를 찾는 중..."):
+        with st.spinner(f"'{search_query}' 관련 기사 찾는 중..."):
             search_results = semantic_search(search_query, top_k=20)
             if search_results:
                 articles = search_results # 기존 리스트를 검색 결과로 교체
-                st.info(f"💡 '{search_query}'에 대한 가장 관련성 높은 결과 {len(search_results)}건을 찾았습니다.")
+                st.info(f"'{search_query}' 검색 결과 {len(search_results)}건")
             else:
                 st.warning("검색 결과가 없습니다.")
 
@@ -174,7 +174,7 @@ def render_tab_briefing(stats, articles):
 
         # 3. 하단 데이터 수집 현황 (간결한 형태)
         st.markdown("---")
-        with st.expander("📊 데이터 수집 상세 현황 (Source Wise)", expanded=False):
+        with st.expander("데이터 수집 상세 현황", expanded=False):
             if stats["sources"]:
                 import pandas as pd
                 df = pd.DataFrame(stats["sources"])
