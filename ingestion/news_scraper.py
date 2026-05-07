@@ -27,7 +27,8 @@ MAX_PER_SOURCE = int(os.getenv("MAX_ARTICLES_PER_SOURCE", "20"))
 
 IMAGE_BLACKLIST = [
     "favicon", "logo", "default_pic", "white_g.png", "logo-google", "nav_logo", 
-    "gstatic.com", "google_news", "google-news", "avatar", "icon", "placeholder", "branding"
+    "gstatic.com", "google_news", "google-news", "avatar", "icon", "placeholder", "branding",
+    "googleusercontent.com"
 ]
 
 def is_valid_image(img_url: str) -> bool:
