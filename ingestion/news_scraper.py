@@ -86,7 +86,9 @@ def _extract_full_text_and_image(url: str) -> tuple[str, Optional[str]]:
         # 더 다양한 본문 컨테이너 정의 (항상 참조 가능하도록 상단 배치)
         selectors = [
             "article", "main", ".post-content", ".article-body", "#content", 
-            "entry-content", ".article_body", ".story-content", ".post_content", ".post-body"
+            ".entry-content", ".article_body", ".story-content", ".post_content", ".post-body",
+            "#articleBodyContents", "#newsEndContents", ".news_end", "#articeBody", # 한국 뉴스 전용
+            ".article_txt", ".article_view", ".viewer"
         ]
         
         # 1. Meta Tags (og, twitter, generic)
