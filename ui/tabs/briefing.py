@@ -16,7 +16,7 @@ def render_tab_briefing(stats, articles):
     st.markdown("<br>", unsafe_allow_html=True)
     
     # --- 시맨틱 검색 바 ---
-    search_query = st.text_input("뉴스 검색", placeholder="관심 키워드 또는 궁금한 내용을 입력하세요...", help="AI가 문맥을 이해하여 가장 관련성 높은 기사를 찾아줍니다.")
+    search_query = st.text_input("뉴스 검색", placeholder="관심 키워드 또는 궁금한 내용을 입력하세요...", help="AI가 문맥을 이해하여 가장 관련성 높은 기사를 찾아줍니다.", key="news_search_input")
     
     if search_query:
         from db.vector_store import semantic_search
@@ -24,7 +24,13 @@ def render_tab_briefing(stats, articles):
             search_results = semantic_search(search_query, top_k=20)
             if search_results:
                 articles = search_results # 기존 리스트를 검색 결과로 교체
-                st.info(f"'{search_query}' 검색 결과 {len(search_results)}건")
+                sc1, sc2 = st.columns([8.5, 1.5], vertical_alignment="center")
+                with sc1:
+                    st.info(f"'{search_query}' 검색 결과 {len(search_results)}건")
+                with sc2:
+                    if st.button("검색 초기화", use_container_width=True):
+                        st.session_state.news_search_input = ""
+                        st.rerun()
             else:
                 st.warning("검색 결과가 없습니다.")
 
