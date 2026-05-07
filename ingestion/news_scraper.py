@@ -25,6 +25,23 @@ logger = logging.getLogger(__name__)
 
 MAX_PER_SOURCE = int(os.getenv("MAX_ARTICLES_PER_SOURCE", "20"))
 
+IMAGE_BLACKLIST = [
+    "favicon", "logo", "default_pic", "white_g.png", "logo-google", "nav_logo", 
+    "gstatic.com", "google_news", "google-news", "avatar", "icon", "placeholder", "branding"
+]
+
+def is_valid_image(img_url: str) -> bool:
+    """이미지가 유효한 기사 이미지인지 체크 (로고/아이콘 제외)"""
+    if not img_url: return False
+    low_url = img_url.lower()
+    # 블랙리스트 포함 여부 확인
+    if any(p in low_url for p in IMAGE_BLACKLIST):
+        return False
+    # 너무 작은 이미지나 아이콘 확장자 제외 (단순화)
+    if low_url.endswith((".ico", ".gif")):
+        return False
+    return True
+
 
 # ---- 데이터 구조 -------------------------------------------
 @dataclass
@@ -59,17 +76,8 @@ def _extract_full_text_and_image(url: str) -> tuple[str, Optional[str]]:
             final_url = str(resp.url)
             soup = BeautifulSoup(resp.text, "lxml")
             
-        def is_valid_image(img_url: str) -> bool:
-            """이미지가 유효한 기사 이미지인지 체크 (로고/아이콘 제외)"""
-            if not img_url: return False
-            low_url = img_url.lower()
-            # 블랙리스트 포함 여부 확인
-            if any(p in low_url for p in IMAGE_BLACKLIST):
-                return False
-            # 너무 작은 이미지나 아이콘 확장자 제외 (단순화)
-            if low_url.endswith((".ico", ".gif")):
-                return False
-            return True
+            final_url = str(resp.url)
+            soup = BeautifulSoup(resp.text, "lxml")
 
         # 대표 이미지 추출 (순차적 탐색)
         thumbnail_url = None
@@ -186,13 +194,16 @@ def fetch_rss_source(source: dict) -> tuple[int, int, int]:
                 continue
 
             # 1. RSS 자체 이미지 우선 확인 (가장 확실함)
-            thumbnail_url = _extract_rss_image(entry)
+            rss_thumb = _extract_rss_image(entry)
+            thumbnail_url = rss_thumb if is_valid_image(rss_thumb) else None
             
             # 2. 본문 및 이미지 크롤링 (웹페이지 방문)
             content, web_thumb = _extract_full_text_and_image(url)
             
-            # 웹 크롤링 이미지가 있으면 우선 사용 (보통 더 고화질), 없으면 RSS 이미지 사용
-            if web_thumb:
+            # 웹 크롤링 이미지가 유효하면 우선 사용 (보통 더 고화질), 없으면 RSS 이미지 사용
+            if is_valid_image(web_thumb):
+                thumbnail_url = web_thumb
+            elif not thumbnail_url and is_valid_image(web_thumb): # 중복 검사지만 확실히
                 thumbnail_url = web_thumb
 
             article = RawArticle(
