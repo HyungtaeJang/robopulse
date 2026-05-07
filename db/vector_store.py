@@ -364,11 +364,15 @@ def semantic_search(query: str, top_k: int = 10) -> list[dict]:
     session = _get_session()
     try:
         result = session.execute(text("""
-            SELECT id, title, source, summary, sentiment, importance, published_at,
-                   1 - (embedding <=> CAST(:embedding AS vector)) AS similarity
-            FROM articles
-            WHERE is_processed = TRUE AND embedding IS NOT NULL
-            ORDER BY embedding <=> CAST(:embedding AS vector)
+            SELECT a.id, a.title, a.url, a.source, a.summary, a.key_points, a.sentiment, a.importance, 
+                   a.published_at, a.collected_at, a.thumbnail_url,
+                   array_agg(t.category) AS tags,
+                   1 - (a.embedding <=> CAST(:embedding AS vector)) AS similarity
+            FROM articles a
+            LEFT JOIN tags t ON a.id = t.article_id
+            WHERE a.is_processed = TRUE AND a.embedding IS NOT NULL
+            GROUP BY a.id
+            ORDER BY a.embedding <=> CAST(:embedding AS vector)
             LIMIT :top_k
         """), {"embedding": embedding_str, "top_k": top_k})
 
