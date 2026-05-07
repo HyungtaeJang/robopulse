@@ -16,11 +16,12 @@ def render_tab_briefing(stats, articles):
     st.markdown("<br>", unsafe_allow_html=True)
     
     # --- 상단 필터 바 ---
-    f_col1, f_col2, f_col3, f_col5, f_col4 = st.columns([2, 2, 2, 2, 1])
+    # 비율 조정: 감성 필터(Sentiment)가 줄바꿈되지 않도록 넉넉한 공간(3.5) 할당
+    f_col1, f_col2, f_col3, f_col5, f_col4 = st.columns([1.5, 1.5, 3.5, 3, 1.2])
     
     with f_col1:
         # 체크박스 변경 시 즉시 반영을 위해 value와 session_state 비교 후 rerun
-        t_only = st.checkbox("오늘 수집된 정보만", value=st.session_state.briefing_today_only)
+        t_only = st.checkbox("오늘 정보만", value=st.session_state.briefing_today_only)
         if t_only != st.session_state.briefing_today_only:
             st.session_state.briefing_today_only = t_only
             st.rerun()
@@ -28,7 +29,7 @@ def render_tab_briefing(stats, articles):
     with f_col2:
         prev_sort = st.session_state.briefing_sort_by
         st.selectbox(
-            "정렬 기준", 
+            "정렬", 
             options=["date", "importance"], 
             format_func=lambda x: "최신순" if x == "date" else "중요도순",
             key="briefing_sort_by"
@@ -37,11 +38,11 @@ def render_tab_briefing(stats, articles):
             st.rerun()
     
     with f_col3:
-        # 감성 필터
+        # 감성 필터 레이블 변경: Sentiment
         sentiment_options = {"positive": "긍정", "neutral": "중립", "negative": "부정"}
-        selected_sentiments = st.multiselect("감성 필터", list(sentiment_options.values()), default=list(sentiment_options.values()), key="sentiment_multiselect")
+        selected_sentiments = st.multiselect("Sentiment", list(sentiment_options.values()), default=list(sentiment_options.values()), key="sentiment_multiselect")
         sentiment_filter = [k for k, v in sentiment_options.items() if v in selected_sentiments]
-
+ 
     with f_col5:
         # 슬라이더 변경 시 즉시 반영
         prev_imp = st.session_state.briefing_min_importance
@@ -53,11 +54,11 @@ def render_tab_briefing(stats, articles):
         )
         if st.session_state.briefing_min_importance != prev_imp:
             st.rerun()
-
+ 
     with f_col4:
         # 태그 필터 초기화 버튼
         if st.session_state.briefing_filter_tag:
-            if st.button("필터 초기화 🔄", use_container_width=True):
+            if st.button("초기화 🔄", use_container_width=True):
                 st.session_state.briefing_filter_tag = None
                 st.rerun()
 
