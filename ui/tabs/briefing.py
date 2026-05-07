@@ -2,6 +2,10 @@ import streamlit as st
 
 def render_tab_briefing(stats, articles):
     # 1. 상단 통계 메트릭
+    # 검색 초기화를 위한 콜백 함수 정의
+    def clear_search_callback():
+        st.session_state.news_search_input = ""
+
     st.markdown("### 오늘의 통계")
     c1, c2, c3, c4 = st.columns(4)
     for col, (label, val, unit) in zip([c1, c2, c3, c4], [
@@ -28,9 +32,7 @@ def render_tab_briefing(stats, articles):
                 with sc1:
                     st.info(f"'{search_query}' 검색 결과 {len(search_results)}건")
                 with sc2:
-                    if st.button("검색 초기화", use_container_width=True):
-                        st.session_state.news_search_input = ""
-                        st.rerun()
+                    st.button("검색 초기화", use_container_width=True, on_click=clear_search_callback)
             else:
                 st.warning("검색 결과가 없습니다.")
 
