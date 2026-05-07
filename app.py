@@ -113,6 +113,10 @@ conn_status = check_all_connections()
 is_live = conn_status["postgres"]
 LMS_MODEL_NAME = sync_lms_model(conn_status)
 
+# ---- 자동화 스케줄러 자동 시작 ----------------------------------
+if is_live:
+    start_scheduler()
+
 # ---- 세션 스테이트 초기화 및 분석 알림 --------------------------
 if "analysis_done_toast" not in st.session_state:
     st.session_state.analysis_done_toast = False
