@@ -78,6 +78,22 @@ def render_tab_briefing(stats, articles):
         for art in filtered:
             sentiment = art.get("sentiment", "neutral")
             thumbnail = art.get("thumbnail_url")
+            # 소스 아이콘 결정 로직
+            source_name = art.get('source', '알 수 없음')
+            url_str = art.get('url', '')
+            source_icon = "🏢" 
+            
+            if "google.com" in url_str or "구글" in source_name:
+                source_icon = '<img src="https://www.google.com/s2/favicons?domain=google.com&sz=32" style="width:14px; height:14px; vertical-align:middle; margin-right:4px; margin-bottom:2px;">'
+            elif "youtube.com" in url_str or "youtu.be" in url_str or "유튜브" in source_name:
+                source_icon = '<img src="https://www.google.com/s2/favicons?domain=youtube.com&sz=32" style="width:14px; height:14px; vertical-align:middle; margin-right:4px; margin-bottom:2px;">'
+            elif "techcrunch.com" in url_str:
+                source_icon = '<img src="https://www.google.com/s2/favicons?domain=techcrunch.com&sz=32" style="width:14px; height:14px; vertical-align:middle; margin-right:4px; margin-bottom:2px;">'
+            elif "ieee.org" in url_str:
+                source_icon = '<img src="https://www.google.com/s2/favicons?domain=ieee.org&sz=32" style="width:14px; height:14px; vertical-align:middle; margin-right:4px; margin-bottom:2px;">'
+            else:
+                source_icon = f'<span style="margin-right:4px;">{source_icon}</span>'
+
             # 썸네일도 클릭 시 새 탭으로 연결되도록 링크 씌우기
             img_tag = f'<a href="{art["url"]}" target="_blank" rel="noopener noreferrer"><img src="{thumbnail}" class="article-thumb" alt="thumbnail"></a>' if thumbnail else ''
             importance = art.get("importance", 0.0)
@@ -127,7 +143,7 @@ def render_tab_briefing(stats, articles):
                 f'{key_points_html}</div>'
                 f'<div class="article-meta" style="font-size: 0.8rem; color: #94a3b8; display: flex; flex-direction: column; justify-content: flex-end; margin-top: 12px;">'
                 f'<div style="display: flex; justify-content: space-between; margin-bottom: 8px;">'
-                f'<span>🏢 {art.get("source")}</span><span>{date_label}: {date_val}</span></div>'
+                f'<span>{source_icon}{source_name}</span><span>{date_label}: {date_val}</span></div>'
                 f'{tag_html}</div></div></div>'
             )
             st.markdown(card_html, unsafe_allow_html=True)
