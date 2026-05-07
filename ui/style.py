@@ -75,10 +75,10 @@ html, body, [class*="css"] { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
 div[data-testid="stTab"] button { font-size: 1rem !important; font-weight: 600 !important; }
 
 /* AI Chat & Bottom Interface - Premium Refinement */
-/* 채팅 입력창 중앙 정렬 및 박스 스타일 복원 (아웃라인 삭제) */
+/* 채팅 입력창 너비 제한 해제 및 정렬 동기화 */
 [data-testid="stChatInput"] {
-    max-width: 800px !important;
-    margin: 0 auto !important;
+    max-width: 100% !important;
+    margin: 0 !important;
     background-color: #ffffff !important;
     border: none !important;
     border-radius: 12px !important;
