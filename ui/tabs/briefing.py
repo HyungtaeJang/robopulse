@@ -78,7 +78,8 @@ def render_tab_briefing(stats, articles):
         for art in filtered:
             sentiment = art.get("sentiment", "neutral")
             thumbnail = art.get("thumbnail_url")
-            img_tag = f'<img src="{thumbnail}" class="article-thumb" alt="thumbnail">' if thumbnail else ''
+            # 썸네일도 클릭 시 새 탭으로 연결되도록 링크 씌우기
+            img_tag = f'<a href="{art["url"]}" target="_blank" rel="noopener noreferrer"><img src="{thumbnail}" class="article-thumb" alt="thumbnail"></a>' if thumbnail else ''
             importance = art.get("importance", 0.0)
             
             # 날짜 보완: published_at이 없으면 collected_at(수집일) 사용
@@ -114,13 +115,13 @@ def render_tab_briefing(stats, articles):
                     tags_spans = "".join([f'<span class="tag-badge">#{tag}</span>' for tag in valid_tags])
                     tag_html = f'<div style="margin-top: 5px;">{tags_spans}</div>'
 
-            st.html(f"""
+            st.markdown(f"""
             <div class="article-card {sentiment}" style="display: flex; gap: 20px; align-items: stretch;">
                 {img_tag}
                 <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
                     <div>
                         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                            <a href="{art['url']}" target="_blank" class="article-title">{art['title']}</a>
+                            <a href="{art['url']}" target="_blank" rel="noopener noreferrer" class="article-title">{art['title']}</a>
                             <span class="badge-importance">⭐ {importance:.1f}</span>
                         </div>
                         <p class="article-summary">{art.get('summary', '요약 정보가 없습니다.')}</p>
@@ -135,7 +136,7 @@ def render_tab_briefing(stats, articles):
                     </div>
                 </div>
             </div>
-            """)
+            """, unsafe_allow_html=True)
 
         # 3. 하단 데이터 수집 현황 (간결한 형태)
         st.markdown("---")
