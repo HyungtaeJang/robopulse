@@ -115,7 +115,7 @@ def render_tab_briefing(stats, articles):
                     tags_spans = "".join([f'<span class="tag-badge">#{tag}</span>' for tag in valid_tags])
                     tag_html = f'<div style="margin-top: 5px;">{tags_spans}</div>'
 
-            st.markdown(f"""
+            st.html(f"""
             <div class="article-card {sentiment}" style="display: flex; gap: 20px; align-items: stretch;">
                 {img_tag}
                 <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
@@ -136,7 +136,7 @@ def render_tab_briefing(stats, articles):
                     </div>
                 </div>
             </div>
-            """, unsafe_allow_html=True)
+            """)
 
         # 3. 하단 데이터 수집 현황 (간결한 형태)
         st.markdown("---")
