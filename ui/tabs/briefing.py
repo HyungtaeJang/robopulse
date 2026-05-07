@@ -15,6 +15,19 @@ def render_tab_briefing(stats, articles):
 
     st.markdown("<br>", unsafe_allow_html=True)
     
+    # --- 시맨틱 검색 바 ---
+    search_query = st.text_input("🔍 시맨틱 뉴스 검색", placeholder="예: Figure AI의 최신 행보, 휴머노이드 관절 기술, 엔비디아의 로봇 칩셋...", help="AI가 문맥을 이해하여 가장 관련성 높은 기사를 찾아줍니다.")
+    
+    if search_query:
+        from db.vector_store import semantic_search
+        with st.spinner(f"'{search_query}'와(과) 관련된 기사를 찾는 중..."):
+            search_results = semantic_search(search_query, top_k=20)
+            if search_results:
+                articles = search_results # 기존 리스트를 검색 결과로 교체
+                st.info(f"💡 '{search_query}'에 대한 가장 관련성 높은 결과 {len(search_results)}건을 찾았습니다.")
+            else:
+                st.warning("검색 결과가 없습니다.")
+
     # --- 상단 필터 바 ---
     # 여백 제거를 위해 4칸으로 재조정 (전체 너비 가득 채움)
     f_col1, f_col2, f_col3, f_col5 = st.columns([1.5, 1.5, 4, 3])
