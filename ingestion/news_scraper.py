@@ -82,6 +82,12 @@ def _extract_full_text_and_image(url: str) -> tuple[str, Optional[str]]:
         # 대표 이미지 추출 (순차적 탐색)
         thumbnail_url = None
         
+        # 더 다양한 본문 컨테이너 정의 (항상 참조 가능하도록 상단 배치)
+        selectors = [
+            "article", "main", ".post-content", ".article-body", "#content", 
+            "entry-content", ".article_body", ".story-content", ".post_content", ".post-body"
+        ]
+        
         # 1. Meta Tags (og, twitter, generic)
         for attr in ["property", "name"]:
             for tag_val in ["og:image", "twitter:image", "image", "thumbnail"]:
@@ -95,11 +101,6 @@ def _extract_full_text_and_image(url: str) -> tuple[str, Optional[str]]:
             
         # 2. Body First Image (if meta fails or is invalid)
         if not thumbnail_url:
-            # 더 다양한 본문 컨테이너 추가
-            selectors = [
-                "article", "main", ".post-content", ".article-body", "#content", 
-                ".entry-content", ".article_body", ".story-content", ".post_content", ".post-body"
-            ]
             for selector in selectors:
                 container = soup.select_one(selector)
                 if container:
