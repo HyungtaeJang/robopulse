@@ -13,7 +13,7 @@ import streamlit as st
 # ---- 페이지 설정 (반드시 모든 st 명령 중 가장 먼저 실행되어야 함) ----
 st.set_page_config(
     page_title="RoboPulse",
-    page_icon="🤖",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
 )
