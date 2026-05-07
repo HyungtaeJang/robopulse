@@ -147,6 +147,20 @@ def get_lms_client() -> OpenAI:
     return _lms_client
 
 
+def get_active_model_name() -> str:
+    """현재 LM Studio에 실제로 로드되어 있는 모델명을 반환하여 중복 로딩 에러를 방지합니다."""
+    try:
+        available = get_available_lms_models()
+        if available:
+            # 현재 서버에 로드된 첫 번째 모델명을 반환
+            return available[0]
+    except Exception as e:
+        logger.debug(f"서버 모델 목록 확인 실패 (폴백 사용): {e}")
+        
+    # 서버 확인 실패 시 환경변수 또는 기본값 사용
+    return os.getenv("LMS_MODEL_NAME", "gemma-4-26b")
+
+
 def _generate_embedding(text: str) -> Optional[list[float]]:
     """LM Studio의 임베딩 API를 호출하여 벡터를 생성합니다."""
     try:

@@ -17,8 +17,7 @@ warnings.filterwarnings("ignore", message="This package .* has been renamed to d
 
 from duckduckgo_search import DDGS
 from engine.graph_builder import get_entity_stats
-from db.vector_store import get_lms_client, add_recommended_source
-from engine.gemma_worker import LMS_MODEL
+from db.vector_store import get_lms_client, add_recommended_source, get_active_model_name
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +89,7 @@ def discover_sources():
 }}
 """
                 resp = client.chat.completions.create(
-                    model=LMS_MODEL,
+                    model=get_active_model_name(),
                     messages=[
                         {"role": "system", "content": "당신은 AI 데이터 엔지니어입니다."},
                         {"role": "user", "content": prompt}

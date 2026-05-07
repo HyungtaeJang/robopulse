@@ -16,13 +16,13 @@ import httpx
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
-from db.vector_store import get_lms_client
+from db.vector_store import get_lms_client, get_active_model_name
 load_dotenv()
 logger = logging.getLogger(__name__)
 
 # ---- 설정 --------------------------------------------------
 LMS_BASE_URL = os.getenv("LMS_API_BASE", "http://localhost:1234/v1")
-LMS_MODEL = os.getenv("LMS_MODEL_NAME", "gemma-4-26b")
+# LMS_MODEL은 이제 get_active_model_name()을 통해 동적으로 결정됩니다.
 PROMPT_DIR = Path(__file__).parent.parent / "prompts"
 
 # _get_client 대신 db.vector_store.get_lms_client를 호출합니다.
@@ -103,7 +103,7 @@ def analyze_article(
         json_schema = ArticleAnalysis.model_json_schema()
         
         response = client.chat.completions.create(
-            model=model_name or LMS_MODEL,
+            model=model_name or get_active_model_name(),
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
