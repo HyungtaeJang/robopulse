@@ -42,8 +42,8 @@ class RawArticle:
 # ---- 본문 추출 ---------------------------------------------
 def _extract_full_text_and_image(url: str) -> tuple[str, Optional[str]]:
     """URL에서 본문 텍스트와 대표 이미지(og:image) URL을 추출합니다 (BeautifulSoup4)."""
-    # 제외할 이미지 패턴 (구글 서비스 아이콘, 로고 등)
-    IMAGE_BLACKLIST = ["googleusercontent.com", "favicon", "logo", "google_news", "default_pic", "white_g.png", "logo-google"]
+    # 제외할 이미지 패턴 (로고, 아이콘 등 기사와 무관한 것)
+    IMAGE_BLACKLIST = ["favicon", "logo", "default_pic", "white_g.png", "logo-google", "nav_logo"]
 
     try:
         # 리다이렉션 허용(follow_redirects=True) 및 브라우저 User-Agent 설정
@@ -91,9 +91,12 @@ def _extract_full_text_and_image(url: str) -> tuple[str, Optional[str]]:
                 container = soup.select_one(selector)
                 if container:
                     # 모든 이미지를 검사하여 유효한 첫 번째 이미지를 선택
-                    imgs = container.find_all("img", src=True)
+                    # lazy loading 대응 (data-src, data-original 등)
+                    imgs = container.find_all("img")
                     for img in imgs:
-                        src = img.get("src")
+                        src = img.get("src") or img.get("data-src") or img.get("data-original")
+                        if not src: continue
+                        
                         abs_src = urljoin(final_url, src)
                         if is_valid_image(abs_src):
                             thumbnail_url = abs_src
@@ -129,6 +132,31 @@ def _parse_date(entry) -> Optional[datetime]:
                 pass
     return None
 
+def _extract_rss_image(entry) -> Optional[str]:
+    """feedparser 엔트리에서 썸네일 이미지를 추출합니다."""
+    # 1. media:content (구글 뉴스 등에서 많이 사용)
+    media_content = entry.get("media_content")
+    if media_content and len(media_content) > 0:
+        return media_content[0].get("url")
+    
+    # 2. links (enclosures)
+    for link in entry.get("links", []):
+        if "image" in link.get("type", ""):
+            return link.get("href")
+            
+    # 3. description 내의 img 태그 (HTML인 경우)
+    summary = entry.get("summary", "")
+    if summary and "<img" in summary:
+        try:
+            temp_soup = BeautifulSoup(summary, "lxml")
+            img = temp_soup.find("img")
+            if img and img.get("src"):
+                return img.get("src")
+        except:
+            pass
+            
+    return None
+
 
 # ---- 핵심 수집 함수 -----------------------------------------
 def fetch_rss_source(source: dict) -> tuple[int, int, int]:
@@ -157,8 +185,15 @@ def fetch_rss_source(source: dict) -> tuple[int, int, int]:
                 logger.debug(f"[스킵] 중복 URL: {url}")
                 continue
 
-            # 본문 수집
-            content, thumbnail_url = _extract_full_text_and_image(url)
+            # 1. RSS 자체 이미지 우선 확인 (가장 확실함)
+            thumbnail_url = _extract_rss_image(entry)
+            
+            # 2. 본문 및 이미지 크롤링 (웹페이지 방문)
+            content, web_thumb = _extract_full_text_and_image(url)
+            
+            # 웹 크롤링 이미지가 있으면 우선 사용 (보통 더 고화질), 없으면 RSS 이미지 사용
+            if web_thumb:
+                thumbnail_url = web_thumb
 
             article = RawArticle(
                 url=url,
