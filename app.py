@@ -127,6 +127,10 @@ if "briefing_min_importance" not in st.session_state:
 if "system_status" not in st.session_state:
     st.session_state.system_status = None
 
+# URL 쿼리 파라미터에서 태그 필터 감지 (태그 클릭 대응)
+if "tag" in st.query_params:
+    st.session_state.briefing_filter_tag = st.query_params["tag"]
+
 # ---- 데모 샘플 데이터 (폴백용) -----------------------------------
 DEMO_ARTICLES = [
     {

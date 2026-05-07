@@ -131,7 +131,8 @@ def render_tab_briefing(stats, articles):
             if tags and tags[0] is not None:
                 valid_tags = [t for t in tags if t and t != 'None'][:8]
                 if valid_tags:
-                    tags_spans = "".join([f'<span class="tag-badge">#{tag}</span>' for tag in valid_tags])
+                    # 클릭 시 URL 파라미터를 변경하여 필터링 트리거
+                    tags_spans = "".join([f'<a href="/?tag={tag}" target="_self" class="tag-badge">#{tag}</a>' for tag in valid_tags])
                     tag_html = f'<div style="margin-top: 5px;">{tags_spans}</div>'
 
             # HTML 코드가 노출되지 않도록 들여쓰기를 제거한 한 줄 형태로 결합하여 렌더링 (target="_blank" 호환성 확보)

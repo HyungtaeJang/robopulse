@@ -62,7 +62,12 @@ html, body, [class*="css"] { font-family: 'Inter', 'Noto Sans KR', sans-serif; }
 .article-summary { color: #475569; font-size: 0.9rem; margin: 0.6rem 0; line-height: 1.6; }
 .article-thumb { width: 140px; height: 90px; border-radius: 6px; object-fit: cover; border: 1px solid #e2e8f0; flex-shrink: 0; }
 .badge-importance { background: #fdf6b2; color: #723b13; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.8rem; }
-.tag-badge { background: #eff6ff; color: #1d4ed8; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; margin-right: 4px; border: 1px solid #dbeafe; }
+.tag-badge { 
+    background: #eff6ff; color: #1d4ed8; padding: 1px 6px; border-radius: 4px; 
+    font-size: 0.7rem; font-weight: 600; margin-right: 4px; border: 1px solid #dbeafe; 
+    text-decoration: none; cursor: pointer; transition: all 0.2s;
+}
+.tag-badge:hover { background: #1d4ed8; color: #ffffff; border-color: #1d4ed8; }
 
 /* 상태 인디케이터 Dot */
 .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
