@@ -437,6 +437,7 @@ def get_pipeline_stats() -> dict:
             SELECT
                 COUNT(*) FILTER (WHERE collected_at::date = CURRENT_DATE) AS today_total,
                 COUNT(*) FILTER (WHERE is_processed = TRUE AND processed_at::date = CURRENT_DATE) AS today_processed,
+                COUNT(*) FILTER (WHERE is_processed = TRUE) AS total_processed,
                 COUNT(*) FILTER (WHERE is_processed = FALSE) AS pending,
                 COUNT(*) AS total
             FROM articles

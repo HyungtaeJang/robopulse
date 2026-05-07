@@ -5,13 +5,13 @@ def render_tab_briefing(stats, articles):
     st.markdown("### 오늘의 통계")
     c1, c2, c3, c4 = st.columns(4)
     for col, (label, val, unit) in zip([c1, c2, c3, c4], [
-        ("오늘 수집", stats["today_total"], "건"),
-        ("분석 완료", stats["today_processed"], "건"),
-        ("대기 중", stats["pending"], "건"),
-        ("누적 기사", stats["total"], "건")
+        ("오늘 수집", stats.get("today_total", 0), "건"),
+        ("오늘 분석", stats.get("today_processed", 0), "건"),
+        ("분석 대기", stats.get("pending", 0), "건"),
+        ("전체 분석", f"{stats.get('total_processed', 0)} / {stats.get('total', 0)}", "건")
     ]):
         with col:
-            st.markdown(f'<div class="metric-card"><div class="metric-value">{val}</div><div class="metric-label">{label} ({unit})</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-card"><div class="metric-value" style="font-size: 1.8rem;">{val}</div><div class="metric-label">{label} ({unit})</div></div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     
