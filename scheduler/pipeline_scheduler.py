@@ -198,7 +198,7 @@ def start_scheduler() -> BackgroundScheduler:
     """스케줄러를 시작하고 인스턴스를 반환합니다."""
     global _scheduler
     if _scheduler and _scheduler.running:
-        logger.info("스케줄러가 이미 실행 중입니다.")
+        logger.debug("스케줄러가 이미 실행 중입니다.")
         return _scheduler
 
     _scheduler = BackgroundScheduler(timezone="Asia/Seoul")

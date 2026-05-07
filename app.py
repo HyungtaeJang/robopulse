@@ -79,6 +79,10 @@ except Exception as e:
     is_live = False
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# 라이브러리 로그 억제 (터미널 노이즈 제거)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
