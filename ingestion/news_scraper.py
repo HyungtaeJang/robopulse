@@ -60,24 +60,23 @@ class RawArticle:
 # ---- 본문 추출 ---------------------------------------------
 def _extract_full_text_and_image(url: str) -> tuple[str, Optional[str]]:
     """URL에서 본문 텍스트와 대표 이미지(og:image) URL을 추출합니다 (BeautifulSoup4)."""
-    # 제외할 이미지 패턴 (로고, 아이콘 등 기사와 무관한 것)
-    IMAGE_BLACKLIST = ["favicon", "logo", "default_pic", "white_g.png", "logo-google", "nav_logo"]
+    # 브라우저처럼 보이기 위한 헤더 설정
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Referer": "https://news.google.com/"
+    }
 
     try:
-        # 리다이렉션 허용(follow_redirects=True) 및 브라우저 User-Agent 설정
-        with httpx.Client(proxy=None, trust_env=False, timeout=15.0, follow_redirects=True) as client:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-                "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-                "Referer": "https://news.google.com/" # 구글 뉴스 유입 위장
-            }
-            resp = client.get(url, headers=headers)
+        # 리다이렉션 허용 및 헤더 적용
+        with httpx.Client(headers=headers, proxy=None, trust_env=False, timeout=15.0, follow_redirects=True) as client:
+            resp = client.get(url)
             resp.raise_for_status()
             final_url = str(resp.url)
-            soup = BeautifulSoup(resp.text, "lxml")
-            
-            final_url = str(resp.url)
+            logger.info(f"   ㄴ 🔗 최종 목적지: {final_url[:80]}...")
             soup = BeautifulSoup(resp.text, "lxml")
 
         # 대표 이미지 추출 (순차적 탐색)
