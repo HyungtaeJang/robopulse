@@ -8,7 +8,7 @@ def render_tab_briefing(stats, articles):
         ("오늘 수집", stats.get("today_total", 0), "건"),
         ("오늘 분석", stats.get("today_processed", 0), "건"),
         ("분석 대기", stats.get("pending", 0), "건"),
-        ("전체 분석", f"{stats.get('total_processed', 0)} / {stats.get('total', 0)}", "건")
+        ("전체 분석 완료", stats.get("total_processed", 0), "건")
     ]):
         with col:
             st.markdown(f'<div class="metric-card"><div class="metric-value" style="font-size: 1.8rem;">{val}</div><div class="metric-label">{label} ({unit})</div></div>', unsafe_allow_html=True)
