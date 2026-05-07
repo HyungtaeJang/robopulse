@@ -16,8 +16,8 @@ def render_tab_briefing(stats, articles):
     st.markdown("<br>", unsafe_allow_html=True)
     
     # --- 상단 필터 바 ---
-    # 비율 조정: 감성 필터(Sentiment)가 줄바꿈되지 않도록 넉넉한 공간(3.5) 할당
-    f_col1, f_col2, f_col3, f_col5, f_col4 = st.columns([1.5, 1.5, 3.5, 3, 1.2])
+    # 여백 제거를 위해 4칸으로 재조정 (전체 너비 가득 채움)
+    f_col1, f_col2, f_col3, f_col5 = st.columns([1.5, 1.5, 4, 3])
     
     with f_col1:
         # 체크박스 변경 시 즉시 반영을 위해 value와 session_state 비교 후 rerun
@@ -55,15 +55,17 @@ def render_tab_briefing(stats, articles):
         if st.session_state.briefing_min_importance != prev_imp:
             st.rerun()
  
-    with f_col4:
-        # 태그 필터 초기화 버튼
-        if st.session_state.briefing_filter_tag:
-            if st.button("초기화 🔄", use_container_width=True):
+    # 태그 필터가 있을 때만 안내창과 함께 초기화 버튼 표시 (여백 문제 해결)
+    if st.session_state.briefing_filter_tag:
+        i_col1, i_col2 = st.columns([8.5, 1.5])
+        with i_col1:
+            st.info(f"선택된 태그 필터: **#{st.session_state.briefing_filter_tag}**")
+        with i_col2:
+            st.markdown("<div style='margin-top: 25px;'>", unsafe_allow_html=True) # 레이블 높이 맞춤용
+            if st.button("필터 초기화 🔄", use_container_width=True):
                 st.session_state.briefing_filter_tag = None
                 st.rerun()
-
-    if st.session_state.briefing_filter_tag:
-        st.info(f"선택된 태그 필터: **#{st.session_state.briefing_filter_tag}**")
+            st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("---")
     
