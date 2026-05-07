@@ -87,6 +87,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ---- LM Studio 모델 설정 (서버 로드 모델 우선 감지) -----------
+@st.cache_data(ttl=600)  # 10분 동안 모델 목록 캐싱하여 네트워크 부하 감소
 def sync_lms_model(conn_status):
     # 실제 서버에서 로드된 모델 목록 가져오기
     available_models = []
@@ -106,11 +107,18 @@ def sync_lms_model(conn_status):
             st.session_state.lms_model = os.getenv("LMS_MODEL_NAME", "supergemma4-26b-uncensored-mlx-v2")
     
     # 2. 결정된 모델명을 DB에 동기화 (스케줄러에서 동일한 모델을 쓰도록 함)
-    if is_live:
+    if conn_status.get("postgres"):
         from db.vector_store import set_system_setting
         set_system_setting("active_lms_model", st.session_state.lms_model)
             
     return st.session_state.lms_model
+
+# ---- 자동화 스케줄러 자동 시작 (리소스 캐싱으로 단 한 번만 실행 보장) ----
+@st.cache_resource
+def auto_start_scheduler(is_live):
+    if is_live:
+        start_scheduler()
+    return True
 
 # ---- 데이터 로드 및 초기화 ------------------------------------
 conn_status = check_all_connections()
@@ -118,8 +126,7 @@ is_live = conn_status["postgres"]
 LMS_MODEL_NAME = sync_lms_model(conn_status)
 
 # ---- 자동화 스케줄러 자동 시작 ----------------------------------
-if is_live:
-    start_scheduler()
+auto_start_scheduler(is_live)
 
 # ---- 세션 스테이트 초기화 및 분석 알림 --------------------------
 if "analysis_done_toast" not in st.session_state:
