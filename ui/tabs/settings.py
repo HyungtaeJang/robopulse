@@ -7,6 +7,7 @@ from db.vector_store import (
     get_available_lms_models, get_system_setting, set_system_setting
 )
 from scheduler.pipeline_scheduler import update_analysis_schedule
+from engine.source_explorer import discover_sources
 
 def render_tab_settings(is_live):
     sub_tab_sources, sub_tab_system = st.tabs(["수집 소스 관리", "시스템 제어"])
@@ -76,13 +77,23 @@ def render_tab_settings(is_live):
                 st.markdown("---")
 
         st.markdown("#### 💡 사용자 제안 수집 소스")
-        st.caption("시스템 사용자들이 제안한 유용한 수집 소스(웹사이트 또는 유튜브 채널)입니다. 승인 시 자동 추가됩니다.")
+        st.caption("시스템 사용자들이 제안하거나 AI가 자율적으로 발굴한 수집 소스 후보입니다. 승인 시 자동 추가됩니다.")
         
+        # AI 자율 탐색 트리거 버튼 추가
+        if st.button("🔍 AI에게 새로운 수집 소스 발굴 시키기", use_container_width=True):
+            if is_live:
+                with st.spinner("AI가 인터넷을 탐색하며 로봇 관련 RSS 및 유튜브 채널을 발굴 중입니다... (약 1분 소요)"):
+                    discover_sources()
+                st.success("✅ AI 탐색 완료! 아래 목록에서 발굴된 소스를 확인하세요.")
+                st.rerun()
+            else:
+                st.error("DB 연결이 필요합니다.")
+
         recommendations = get_recommended_sources() if is_live else []
         pending_recs = [r for r in recommendations if r['status'] == 'pending']
         
         if not pending_recs:
-            st.info("현재 대기 중인 추천 소스가 없습니다.")
+            st.info("현재 대기 중인 추천 소스가 없습니다. 위 버튼을 눌러 AI에게 탐색을 시켜보세요!")
         else:
             for rec in pending_recs:
                 rc1, rc2, rc3 = st.columns([6, 2, 2])
