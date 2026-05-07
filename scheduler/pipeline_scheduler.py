@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 NEWS_INTERVAL_HOURS = int(os.getenv("NEWS_FETCH_INTERVAL_HOURS", "1"))
 VIDEO_CRON_HOUR = int(os.getenv("VIDEO_FETCH_CRON_HOUR", "3"))
-ANALYSIS_CRON_HOUR = int(os.getenv("ANALYSIS_CRON_HOUR", "2"))
+ANALYSIS_CRON_HOUR = int(os.getenv("ANALYSIS_CRON_HOUR", "4"))
 
 
 # ---- 파이프라인 작업 함수들 ---------------------------------

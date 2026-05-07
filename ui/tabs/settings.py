@@ -122,7 +122,7 @@ def render_tab_settings(is_live):
         st.markdown("#### AI 분석 스케줄링")
         st.caption("서버 부하가 적은 시간에 대규모 AI 분석(요약, 지식그래프 구성)을 일괄 수행합니다.")
         
-        current_analysis_hour = int(os.getenv("ANALYSIS_CRON_HOUR", "2"))
+        current_analysis_hour = int(os.getenv("ANALYSIS_CRON_HOUR", "4"))
         if "analysis_hour" not in st.session_state:
             st.session_state.analysis_hour = current_analysis_hour
             
