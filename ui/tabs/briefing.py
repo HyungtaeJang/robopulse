@@ -115,28 +115,22 @@ def render_tab_briefing(stats, articles):
                     tags_spans = "".join([f'<span class="tag-badge">#{tag}</span>' for tag in valid_tags])
                     tag_html = f'<div style="margin-top: 5px;">{tags_spans}</div>'
 
-            st.html(f"""
-            <div class="article-card {sentiment}" style="display: flex; gap: 20px; align-items: stretch;">
-                {img_tag}
-                <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
-                    <div>
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                            <a href="{art['url']}" target="_blank" rel="noopener noreferrer" class="article-title">{art['title']}</a>
-                            <span class="badge-importance">⭐ {importance:.1f}</span>
-                        </div>
-                        <p class="article-summary">{art.get('summary', '요약 정보가 없습니다.')}</p>
-                        {key_points_html}
-                    </div>
-                    <div class="article-meta" style="font-size: 0.8rem; color: #94a3b8; display: flex; flex-direction: column; justify-content: flex-end; margin-top: 12px;">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                            <span>🏢 {art.get('source')}</span>
-                            <span>{date_label}: {date_val}</span>
-                        </div>
-                        {tag_html}
-                    </div>
-                </div>
-            </div>
-            """)
+            # HTML 코드가 노출되지 않도록 들여쓰기를 제거한 한 줄 형태로 결합하여 렌더링 (target="_blank" 호환성 확보)
+            card_html = (
+                f'<div class="article-card {sentiment}" style="display: flex; gap: 20px; align-items: stretch;">'
+                f'{img_tag}'
+                f'<div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">'
+                f'<div><div style="display: flex; justify-content: space-between; align-items: flex-start;">'
+                f'<a href="{art["url"]}" target="_blank" rel="noopener noreferrer" class="article-title">{art["title"]}</a>'
+                f'<span class="badge-importance">⭐ {importance:.1f}</span></div>'
+                f'<p class="article-summary">{art.get("summary", "요약 정보가 없습니다.")}</p>'
+                f'{key_points_html}</div>'
+                f'<div class="article-meta" style="font-size: 0.8rem; color: #94a3b8; display: flex; flex-direction: column; justify-content: flex-end; margin-top: 12px;">'
+                f'<div style="display: flex; justify-content: space-between; margin-bottom: 8px;">'
+                f'<span>🏢 {art.get("source")}</span><span>{date_label}: {date_val}</span></div>'
+                f'{tag_html}</div></div></div>'
+            )
+            st.markdown(card_html, unsafe_allow_html=True)
 
         # 3. 하단 데이터 수집 현황 (간결한 형태)
         st.markdown("---")
