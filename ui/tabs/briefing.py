@@ -37,44 +37,38 @@ def render_tab_briefing(stats, articles):
                 st.warning("검색 결과가 없습니다.")
 
     # --- 상단 필터 바 ---
-    # 여백 제거를 위해 4칸으로 재조정 (전체 너비 가득 채움)
     f_col1, f_col2, f_col3, f_col5 = st.columns([1.5, 1.5, 4, 3])
     
     with f_col1:
-        # 체크박스 변경 시 즉시 반영을 위해 value와 session_state 비교 후 rerun
-        t_only = st.checkbox("오늘 정보만", value=st.session_state.briefing_today_only)
-        if t_only != st.session_state.briefing_today_only:
-            st.session_state.briefing_today_only = t_only
-            st.rerun()
+        # key 바인딩으로 자동 관리
+        st.checkbox("오늘 정보만", key="briefing_today_only")
     
     with f_col2:
-        prev_sort = st.session_state.briefing_sort_by
         st.selectbox(
             "정렬", 
             options=["date", "importance"], 
             format_func=lambda x: "최신순" if x == "date" else "중요도순",
             key="briefing_sort_by"
         )
-        if st.session_state.briefing_sort_by != prev_sort:
-            st.rerun()
     
     with f_col3:
         # 감성 필터 레이블 변경: Sentiment
         sentiment_options = {"positive": "긍정", "neutral": "중립", "negative": "부정"}
-        selected_sentiments = st.multiselect("Sentiment", list(sentiment_options.values()), default=list(sentiment_options.values()), key="sentiment_multiselect")
+        selected_sentiments = st.multiselect(
+            "Sentiment", 
+            list(sentiment_options.values()), 
+            default=list(sentiment_options.values()), 
+            key="sentiment_multiselect"
+        )
         sentiment_filter = [k for k, v in sentiment_options.items() if v in selected_sentiments]
  
     with f_col5:
-        # 슬라이더 변경 시 즉시 반영
-        prev_imp = st.session_state.briefing_min_importance
-        st.session_state.briefing_min_importance = st.slider(
+        st.slider(
             "최소 별점(중요도)", 
             min_value=0.0, max_value=10.0, step=0.5,
-            value=st.session_state.briefing_min_importance,
+            key="briefing_min_importance",
             help="이 점수 이상의 기사만 표시합니다."
         )
-        if st.session_state.briefing_min_importance != prev_imp:
-            st.rerun()
  
     # 태그 필터가 있을 때만 안내창과 함께 초기화 버튼 표시 (여백 문제 해결)
     if st.session_state.briefing_filter_tag:

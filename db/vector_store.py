@@ -500,9 +500,13 @@ def check_all_connections() -> dict:
 
     # 3. LM Studio
     try:
-        client = get_lms_client()
-        client.models.list()
-        results["lms"] = True
+        import httpx
+        lms_api_base = os.getenv("LMS_API_BASE", "http://localhost:1234/v1")
+        # 가벼운 HTTP GET 요청으로 모델 목록 엔드포인트 확인 (3초 타임아웃)
+        with httpx.Client(timeout=3.0) as client:
+            resp = client.get(f"{lms_api_base}/models")
+            if resp.status_code == 200:
+                results["lms"] = True
     except Exception:
         pass
 

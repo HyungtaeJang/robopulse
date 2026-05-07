@@ -105,19 +105,26 @@ def sync_lms_model(conn_status):
         except:
             pass
     
-    # 1. 세션에 모델이 없거나, 있는데 현재 서버 목록에는 없는 경우 (서버에서 모델 교체 시)
-    if "lms_model" not in st.session_state or (available_models and st.session_state.lms_model not in available_models):
+    # 1. 세션에 모델이 없거나, 현재 서버 목록에 없는 경우 자동 선택
+    current_model = st.session_state.get("lms_model")
+    target_model = current_model
+
+    if not current_model or (available_models and current_model not in available_models):
         if available_models:
-            # 서버에 로드된 모델 중 첫 번째를 기본값으로 사용
-            st.session_state.lms_model = available_models[0]
+            target_model = available_models[0]
         else:
-            # 서버에 로드된 게 없으면 환경변수 또는 하드코딩 폴백
-            st.session_state.lms_model = os.getenv("LMS_MODEL_NAME", "supergemma4-26b-uncensored-mlx-v2")
-    
-    # 2. 결정된 모델명을 DB에 동기화 (스케줄러에서 동일한 모델을 쓰도록 함)
-    if conn_status.get("postgres"):
-        from db.vector_store import set_system_setting
-        set_system_setting("active_lms_model", st.session_state.lms_model)
+            target_model = os.getenv("LMS_MODEL_NAME", "supergemma4-26b-uncensored-mlx-v2")
+        
+        st.session_state.lms_model = target_model
+        
+        # 모델이 변경되었을 때만 DB에 동기화 (오버헤드 방지)
+        if conn_status.get("postgres"):
+            from db.vector_store import set_system_setting
+            try:
+                set_system_setting("active_lms_model", target_model)
+                logger.info(f"시스템 모델 동기화 완료: {target_model}")
+            except:
+                pass
             
     return st.session_state.lms_model
 
@@ -137,8 +144,6 @@ LMS_MODEL_NAME = sync_lms_model(conn_status)
 auto_start_scheduler(is_live)
 
 # ---- 세션 스테이트 초기화 및 분석 알림 --------------------------
-if "analysis_done_toast" not in st.session_state:
-    st.session_state.analysis_done_toast = False
 if "briefing_limit" not in st.session_state:
     st.session_state.briefing_limit = 50
 if "briefing_filter_tag" not in st.session_state:
@@ -149,12 +154,18 @@ if "briefing_sort_by" not in st.session_state:
     st.session_state.briefing_sort_by = "date"
 if "briefing_min_importance" not in st.session_state:
     st.session_state.briefing_min_importance = 7.0
+if "sentiment_multiselect" not in st.session_state:
+    st.session_state.sentiment_multiselect = ["긍정", "중립", "부정"]
 if "system_status" not in st.session_state:
     st.session_state.system_status = None
+if "analysis_done_toast" not in st.session_state:
+    st.session_state.analysis_done_toast = False
 
 # URL 쿼리 파라미터에서 태그 필터 감지 (태그 클릭 대응)
 if "tag" in st.query_params:
-    st.session_state.briefing_filter_tag = st.query_params["tag"]
+    new_tag = st.query_params["tag"]
+    if st.session_state.briefing_filter_tag != new_tag:
+        st.session_state.briefing_filter_tag = new_tag
 
 # ---- 데모 샘플 데이터 (폴백용) -----------------------------------
 DEMO_ARTICLES = [
@@ -188,9 +199,10 @@ if mgr["done"] and not st.session_state.analysis_done_toast:
 elif not mgr["done"]:
     st.session_state.analysis_done_toast = False
 
-# DB 초기화 (뉴스 소스 테이블 등)
-if is_live:
+# DB 초기화 (뉴스 소스 테이블 등) - 세션당 1회 실행 보장
+if is_live and "db_initialized" not in st.session_state:
     init_news_sources()
+    st.session_state.db_initialized = True
 
 # 그래프 복원
 if is_live and "graph_initialized" not in st.session_state:
