@@ -60,9 +60,9 @@ def render_tab_briefing(stats, articles):
         # 수직 중앙 정렬로 레이아웃 보정
         i_col1, i_col2 = st.columns([8.5, 1.5], vertical_alignment="center")
         with i_col1:
-            # st.info 대신 버튼 높이(38px)에 맞춘 커스텀 박스 사용
+            # 버튼과 시각적 수평 선을 맞추기 위해 margin-top 조정
             st.markdown(f"""
-                <div style="background-color: #eff6ff; color: #1e40af; padding: 0 15px; border-radius: 6px; border: 1px solid #dbeafe; font-size: 0.85rem; height: 38px; display: flex; align-items: center;">
+                <div style="background-color: #eff6ff; color: #1e40af; padding: 0 15px; border-radius: 6px; border: 1px solid #dbeafe; font-size: 0.85rem; height: 38px; display: flex; align-items: center; margin-top: 1px;">
                     선택된 태그 필터: <strong style="margin-left: 5px;">#{st.session_state.briefing_filter_tag}</strong>
                 </div>
             """, unsafe_allow_html=True)
