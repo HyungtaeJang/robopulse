@@ -188,6 +188,18 @@ def save_article(article) -> Optional[str]:
     embed_text = f"{article.title}\n\n{article.content[:1500]}"
     embedding = _generate_embedding(embed_text)
 
+    # 1. 시맨틱 중복 체크 (선택 사항)
+    is_dedup_enabled = get_system_setting("semantic_dedup_enabled", "True") == "True"
+    if is_dedup_enabled and embedding:
+        # 최근 3일 이내의 유사 기사 검색
+        threshold_str = get_system_setting("semantic_dedup_threshold", "0.95")
+        threshold = float(threshold_str) if threshold_str else 0.95
+        
+        dup_article = _check_semantic_duplicate(embedding, threshold=threshold, days=3)
+        if dup_article:
+            logger.info(f"[스킵] 유사 기사 발견: '{article.title}' <-> '{dup_article['title']}' (유사도: {dup_article['similarity']:.3f})")
+            return None
+
     session = _get_session()
     try:
         article_id = str(uuid.uuid4())
@@ -217,6 +229,40 @@ def save_article(article) -> Optional[str]:
     except Exception as e:
         session.rollback()
         logger.error(f"기사 저장 실패: {e}")
+        return None
+    finally:
+        session.close()
+
+
+def _check_semantic_duplicate(embedding: list[float], threshold: float = 0.95, days: int = 3) -> Optional[dict]:
+    """
+    주어진 임베딩과 유사한 기사가 최근 N일 이내에 존재하는지 확인합니다.
+    """
+    if not embedding: return None
+    
+    session = _get_session()
+    try:
+        # 코사인 유사도를 사용하여 중복 체크 (1 - distance)
+        # pgvector의 <=> 연산자는 코사인 거리를 의미하므로, 1 - 거리 = 유사도
+        query = text(f"""
+            SELECT title, 1 - (embedding <=> :embedding) as similarity
+            FROM articles
+            WHERE created_at >= NOW() - INTERVAL '{days} days'
+            AND 1 - (embedding <=> :embedding) >= :threshold
+            ORDER BY similarity DESC
+            LIMIT 1
+        """)
+        
+        result = session.execute(query, {
+            "embedding": f"[{','.join(str(v) for v in embedding)}]",
+            "threshold": threshold
+        }).fetchone()
+        
+        if result:
+            return {"title": result[0], "similarity": result[1]}
+        return None
+    except Exception as e:
+        logger.error(f"중복 체크 중 오류: {e}")
         return None
     finally:
         session.close()

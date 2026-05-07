@@ -160,6 +160,41 @@ def render_tab_settings(is_live):
             on_change=on_batch_limit_change,
             help="수동/자동 분석 시 한 번에 처리할 기사의 최대 개수입니다."
         )
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("#### 중복 기사 필터링 (Semantic Dedup)")
+        
+        # 중복 제거 활성화 토글
+        is_dedup_enabled = get_system_setting("semantic_dedup_enabled", "True") == "True"
+        def on_dedup_toggle():
+            val = st.session_state.semantic_dedup_toggle
+            set_system_setting("semantic_dedup_enabled", str(val))
+            st.toast(f"✅ 유사 기사 중복 필터링이 {'활성화' if val else '비활성화'}되었습니다.")
+
+        st.toggle(
+            "유사 기사 중복 필터링 사용",
+            value=is_dedup_enabled,
+            key="semantic_dedup_toggle",
+            on_change=on_dedup_toggle,
+            help="내용이 유사한 기사를 자동으로 걸러냅니다."
+        )
+
+        # 유사도 임계값 설정
+        current_threshold = float(get_system_setting("semantic_dedup_threshold", "0.95"))
+        def on_threshold_change():
+            val = st.session_state.semantic_dedup_threshold_slider
+            set_system_setting("semantic_dedup_threshold", f"{val:.2f}")
+            st.toast(f"✅ 중복 판단 임계값이 {val:.2f}로 설정되었습니다.")
+
+        st.slider(
+            "중복 판단 유사도 임계값",
+            min_value=0.70, max_value=0.99,
+            value=current_threshold,
+            step=0.01,
+            key="semantic_dedup_threshold_slider",
+            on_change=on_threshold_change,
+            help="높을수록(1.0에 가까울수록) 아주 똑같은 기사만 걸러내고, 낮을수록 비슷한 주제도 모두 걸러냅니다. 권장값: 0.95"
+        )
         
         st.markdown("---")
         st.markdown("#### Local LLM 모델 설정")
