@@ -47,6 +47,7 @@ def fix_existing_thumbnails():
                 _, new_thumb = _extract_full_text_and_image(url)
                 
                 if new_thumb and is_valid_image(new_thumb):
+                    logger.info(f"   ㄴ 📸 이미지 발견! -> {new_thumb[:80]}...")
                     session.execute(
                         text("UPDATE articles SET thumbnail_url = :t WHERE id = :id"),
                         {"t": new_thumb, "id": aid}
@@ -55,6 +56,8 @@ def fix_existing_thumbnails():
                     if fixed_count % 5 == 0: # 5개마다 실시간 반영
                         session.commit()
                         logger.info(f"✨ 현재 {fixed_count}개 수리 완료...")
+                else:
+                    logger.info("   ㄴ ⏭️ 유효한 이미지를 찾지 못했습니다.")
                 
             except Exception as e:
                 logger.warning(f"❌ {title[:20]} 수리 실패: {e}")
