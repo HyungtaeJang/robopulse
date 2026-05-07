@@ -152,6 +152,13 @@ def render_tab_briefing(stats, articles):
             )
             st.markdown(card_html, unsafe_allow_html=True)
 
+        # 2.5 "더 보기" 버튼 추가 (현재 불러온 기사가 limit과 같을 때만 표시)
+        if len(articles) >= st.session_state.briefing_limit:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("➕ 기사 더 보기 (50개 추가)", use_container_width=True):
+                st.session_state.briefing_limit += 50
+                st.rerun()
+
         # 3. 하단 데이터 수집 현황 (간결한 형태)
         st.markdown("---")
         with st.expander("📊 데이터 수집 상세 현황 (Source Wise)", expanded=False):

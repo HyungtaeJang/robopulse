@@ -116,6 +116,8 @@ LMS_MODEL_NAME = sync_lms_model(conn_status)
 # ---- 세션 스테이트 초기화 및 분석 알림 --------------------------
 if "analysis_done_toast" not in st.session_state:
     st.session_state.analysis_done_toast = False
+if "briefing_limit" not in st.session_state:
+    st.session_state.briefing_limit = 50
 if "briefing_filter_tag" not in st.session_state:
     st.session_state.briefing_filter_tag = None
 if "briefing_today_only" not in st.session_state:
@@ -183,7 +185,7 @@ if is_live:
     stats = get_pipeline_stats()
     # 파라미터 기반 기사 로드
     articles = get_latest_articles(
-        limit=50, 
+        limit=st.session_state.briefing_limit, 
         min_importance=st.session_state.briefing_min_importance, 
         today_only=st.session_state.briefing_today_only,
         tag_filter=st.session_state.briefing_filter_tag,
