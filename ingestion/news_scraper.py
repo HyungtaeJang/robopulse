@@ -95,15 +95,31 @@ def _extract_full_text_and_image(url: str) -> tuple[str, Optional[str]]:
             
         # 2. Body First Image (if meta fails or is invalid)
         if not thumbnail_url:
-            for selector in ["article", "main", ".post-content", ".article-body", "#content"]:
+            # 더 다양한 본문 컨테이너 추가
+            selectors = [
+                "article", "main", ".post-content", ".article-body", "#content", 
+                ".entry-content", ".article_body", ".story-content", ".post_content", ".post-body"
+            ]
+            for selector in selectors:
                 container = soup.select_one(selector)
                 if container:
                     # 모든 이미지를 검사하여 유효한 첫 번째 이미지를 선택
-                    # lazy loading 대응 (data-src, data-original 등)
                     imgs = container.find_all("img")
                     for img in imgs:
-                        src = img.get("src") or img.get("data-src") or img.get("data-original")
+                        # 레이지 로딩 및 고해상도 속성 총망라
+                        src = (
+                            img.get("src") or 
+                            img.get("data-src") or 
+                            img.get("data-original") or 
+                            img.get("data-lazy-src") or 
+                            img.get("data-hi-res") or
+                            img.get("srcset")
+                        )
                         if not src: continue
+                        
+                        # srcset 처리 (콤마로 구분된 목록 중 첫 번째 URL 선택)
+                        if "," in src and " " in src:
+                            src = src.split(",")[0].strip().split(" ")[0]
                         
                         abs_src = urljoin(final_url, src)
                         if is_valid_image(abs_src):
@@ -111,12 +127,21 @@ def _extract_full_text_and_image(url: str) -> tuple[str, Optional[str]]:
                             break
                     if thumbnail_url: break
 
-        # 상대 경로 보정 (위에서 안 되었을 경우 대비)
-        if thumbnail_url and not thumbnail_url.startswith(("http://", "https://")):
-            thumbnail_url = urljoin(final_url, thumbnail_url)
+        # 3. Aggressive Fallback (컨테이너 밖 body 전체에서 찾기)
+        if not thumbnail_url:
+            body = soup.find("body")
+            if body:
+                for img in body.find_all("img"):
+                    src = img.get("src") or img.get("data-src")
+                    if not src: continue
+                    abs_src = urljoin(final_url, src)
+                    # 블랙리스트에 없고, 확장자가 유효하면 채택
+                    if is_valid_image(abs_src):
+                        thumbnail_url = abs_src
+                        break
 
         # 주요 본문 태그 우선 탐색
-        for selector in ["article", "main", ".post-content", ".article-body", "#content"]:
+        for selector in selectors:
             container = soup.select_one(selector)
             if container:
                 return container.get_text(separator="\n", strip=True)[:8000], thumbnail_url
