@@ -57,7 +57,6 @@ def render_tab_briefing(stats, articles):
         selected_sentiments = st.multiselect(
             "Sentiment", 
             list(sentiment_options.values()), 
-            default=list(sentiment_options.values()), 
             key="sentiment_multiselect"
         )
         sentiment_filter = [k for k, v in sentiment_options.items() if v in selected_sentiments]
