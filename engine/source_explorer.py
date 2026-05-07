@@ -12,6 +12,9 @@ from datetime import datetime
 # 향후 패키지명(ddgs) 변경 예고인 RuntimeWarning 숨김 처리
 warnings.filterwarnings("ignore", category=RuntimeWarning, module="duckduckgo_search.*")
 
+# duckduckgo_search 관련 단순 안내 경고 숨기기
+warnings.filterwarnings("ignore", message="This package .* has been renamed to ddgs")
+
 from duckduckgo_search import DDGS
 from engine.graph_builder import get_entity_stats
 from db.vector_store import get_lms_client, add_recommended_source
