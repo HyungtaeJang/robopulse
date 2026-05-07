@@ -9,6 +9,14 @@ from datetime import datetime, timedelta
 import random
 
 import streamlit as st
+
+# ---- 페이지 설정 (반드시 모든 st 명령 중 가장 먼저 실행되어야 함) ----
+st.set_page_config(
+    page_title="RoboPulse",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 import plotly.graph_objects as go
 import networkx as nx
 import threading
@@ -165,12 +173,6 @@ DEMO_STATS = {
     "sources": []
 }
 
-# ---- 페이지 설정 -------------------------------------------
-st.set_page_config(
-    page_title="RoboPulse",
-    page_icon="",
-    layout="wide",
-)
 
 # ---- CSS 디자인 --------------------------------------------
 from ui.style import apply_global_styles
