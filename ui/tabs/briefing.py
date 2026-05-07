@@ -57,16 +57,15 @@ def render_tab_briefing(stats, articles):
  
     # 태그 필터가 있을 때만 안내창과 함께 초기화 버튼 표시 (여백 문제 해결)
     if st.session_state.briefing_filter_tag:
-        i_col1, i_col2 = st.columns([8.5, 1.5])
+        # 수직 중앙 정렬로 레이아웃 보정
+        i_col1, i_col2 = st.columns([8.5, 1.5], vertical_alignment="center")
         with i_col1:
             st.info(f"선택된 태그 필터: **#{st.session_state.briefing_filter_tag}**")
         with i_col2:
-            st.markdown("<div style='margin-top: 25px;'>", unsafe_allow_html=True) 
             if st.button("필터 초기화 🔄", use_container_width=True):
                 st.session_state.briefing_filter_tag = None
                 st.query_params.clear() # URL 파라미터 삭제 (중요)
                 st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("---")
     
