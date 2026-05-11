@@ -98,20 +98,35 @@ def render_tab_briefing(stats, articles):
             # 소스 아이콘 결정 로직
             source_name = art.get('source', '알 수 없음')
             url_str = art.get('url', '')
-            source_icon = "🏢" 
+            from urllib.parse import urlparse
+            source_icon = "🏢"
             
-            if "google.com" in url_str or "구글" in source_name:
-                source_icon = '<img src="https://www.google.com/s2/favicons?domain=google.com&sz=32" style="width:14px; height:14px; vertical-align:middle; margin-right:4px; margin-bottom:2px;">'
-            elif "youtube.com" in url_str or "youtu.be" in url_str or "유튜브" in source_name:
-                source_icon = '<img src="https://www.google.com/s2/favicons?domain=youtube.com&sz=32" style="width:14px; height:14px; vertical-align:middle; margin-right:4px; margin-bottom:2px;">'
-            elif "techcrunch.com" in url_str:
-                source_icon = '<img src="https://www.google.com/s2/favicons?domain=techcrunch.com&sz=32" style="width:14px; height:14px; vertical-align:middle; margin-right:4px; margin-bottom:2px;">'
-            elif "ieee.org" in url_str:
-                source_icon = '<img src="https://www.google.com/s2/favicons?domain=ieee.org&sz=32" style="width:14px; height:14px; vertical-align:middle; margin-right:4px; margin-bottom:2px;">'
-            elif "therobotreport.com" in url_str or "The Robot Report" in source_name:
-                source_icon = '<img src="https://www.google.com/s2/favicons?domain=therobotreport.com&sz=32" style="width:14px; height:14px; vertical-align:middle; margin-right:4px; margin-bottom:2px;">'
-            else:
-                source_icon = f'<span style="margin-right:4px;">{source_icon}</span>'
+            if url_str:
+                try:
+                    domain = urlparse(url_str).netloc
+                    if domain:
+                        source_icon = f'<img src="https://www.google.com/s2/favicons?domain={domain}&sz=32" style="width:14px; height:14px; vertical-align:middle; margin-right:4px; margin-bottom:2px;">'
+                except Exception:
+                    pass
+            
+            # URL 파싱에 실패했거나 도메인이 없는 경우, 기존 이름 기반 매핑 시도
+            if source_icon == "🏢":
+                fallback_domain = None
+                if "구글" in source_name or "google" in source_name.lower():
+                    fallback_domain = "google.com"
+                elif "유튜브" in source_name or "youtube" in source_name.lower():
+                    fallback_domain = "youtube.com"
+                elif "techcrunch" in source_name.lower():
+                    fallback_domain = "techcrunch.com"
+                elif "ieee" in source_name.lower():
+                    fallback_domain = "ieee.org"
+                elif "robot report" in source_name.lower():
+                    fallback_domain = "therobotreport.com"
+                
+                if fallback_domain:
+                    source_icon = f'<img src="https://www.google.com/s2/favicons?domain={fallback_domain}&sz=32" style="width:14px; height:14px; vertical-align:middle; margin-right:4px; margin-bottom:2px;">'
+                else:
+                    source_icon = f'<span style="margin-right:4px;">🏢</span>'
 
             # 썸네일도 클릭 시 새 탭으로 연결되도록 링크 씌우기
             img_tag = f'<a href="{art["url"]}" target="_blank" rel="noopener noreferrer"><img src="{thumbnail}" class="article-thumb" alt="thumbnail"></a>' if thumbnail else ''
