@@ -108,6 +108,8 @@ def render_tab_briefing(stats, articles):
                 source_icon = '<img src="https://www.google.com/s2/favicons?domain=techcrunch.com&sz=32" style="width:14px; height:14px; vertical-align:middle; margin-right:4px; margin-bottom:2px;">'
             elif "ieee.org" in url_str:
                 source_icon = '<img src="https://www.google.com/s2/favicons?domain=ieee.org&sz=32" style="width:14px; height:14px; vertical-align:middle; margin-right:4px; margin-bottom:2px;">'
+            elif "therobotreport.com" in url_str or "The Robot Report" in source_name:
+                source_icon = '<img src="https://www.google.com/s2/favicons?domain=therobotreport.com&sz=32" style="width:14px; height:14px; vertical-align:middle; margin-right:4px; margin-bottom:2px;">'
             else:
                 source_icon = f'<span style="margin-right:4px;">{source_icon}</span>'
 
