@@ -199,6 +199,11 @@ if mgr["done"] and not st.session_state.analysis_done_toast:
 elif not mgr["done"]:
     st.session_state.analysis_done_toast = False
 
+# 분석 진행 중일 때만 주기적으로 화면을 갱신(3초 주기)하여 실시간 게이지 및 완료 토스트를 즉시 반영
+if is_live and mgr["active"]:
+    time.sleep(3.0)
+    st.rerun()
+
 # DB 초기화 (뉴스 소스 테이블 등) - 세션당 1회 실행 보장
 if is_live and "db_initialized" not in st.session_state:
     init_news_sources()
