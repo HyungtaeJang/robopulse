@@ -8,6 +8,7 @@ APScheduler 기반 완전 자동화 파이프라인.
 import logging
 import os
 from datetime import datetime
+import threading
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
@@ -20,6 +21,74 @@ logger = logging.getLogger(__name__)
 NEWS_INTERVAL_HOURS = int(os.getenv("NEWS_FETCH_INTERVAL_HOURS", "1"))
 VIDEO_CRON_HOUR = int(os.getenv("VIDEO_FETCH_CRON_HOUR", "3"))
 ANALYSIS_CRON_HOUR = int(os.getenv("ANALYSIS_CRON_HOUR", "4"))
+
+
+# ---- 실시간 분석 동시성 제어 변수 및 락 ----------------------
+_analysis_lock = threading.Lock()
+_has_pending_analysis = False
+
+
+def _run_background_analysis():
+    """실시간 수집된 뉴스를 백그라운드 스레드에서 안전하게 분석합니다. (더티 플래그 패턴 적용)"""
+    global _has_pending_analysis
+    import sys
+
+    # 1. 락 획득 시도 (Non-blocking)
+    if not _analysis_lock.acquire(blocking=False):
+        # 이미 다른 스레드가 실행 중이면 예약 플래그만 활성화하고 즉시 리턴
+        _has_pending_analysis = True
+        logger.info("🤖 [실시간 AI 분석] 이미 분석 스레드가 실행 중입니다. 대기열(Dirty Flag) 예약을 활성화하고 종료합니다.")
+        return
+
+    try:
+        # 2. Streamlit의 ANALYSIS_MANAGER 연동 (Streamlit 프로세스 안에서 동작할 때만)
+        main_mod = sys.modules.get("__main__")
+        mgr = None
+        if main_mod and hasattr(main_mod, "ANALYSIS_MANAGER"):
+            mgr = getattr(main_mod, "ANALYSIS_MANAGER")
+
+        def cb(current, total):
+            if mgr:
+                with mgr["lock"]:
+                    if current == -1:  # 오류 발생
+                        mgr["active"] = False
+                        return
+                    mgr["current"] = current
+                    mgr["total"] = total
+                    if current >= total and total > 0:
+                        mgr["active"] = False
+                        mgr["done"] = True
+
+        # 연속 쿼리 연장 루프 (더티 플래그 체크)
+        while True:
+            # 먼저 누적되어 대기 중이던 플래그를 클리어
+            _has_pending_analysis = False
+
+            if mgr:
+                with mgr["lock"]:
+                    # 이미 UI나 다른 백그라운드에서 돌고 있으면 상태 맞춰줌
+                    mgr["active"] = True
+                    mgr["current"] = 0
+                    mgr["total"] = 0
+                    mgr["done"] = False
+
+            logger.info("🤖 [실시간 AI 분석] 실시간 분석 작업을 시작합니다.")
+            job_analyze_unprocessed(progress_callback=cb if mgr else None)
+
+            # 분석 루프가 끝난 후, 그사이에 신규 추가/수집 요청이 들어왔는지 확인
+            if not _has_pending_analysis:
+                break
+            
+            logger.info("🔄 [실시간 AI 분석] 분석 도중 추가로 수집된 뉴스가 존재합니다. 연속 처리를 위해 분석 루프를 연장합니다.")
+
+    except Exception as e:
+        logger.error(f"❌ [실시간 AI 분석] 실행 중 에러 발생: {e}")
+        if mgr:
+            with mgr["lock"]:
+                mgr["active"] = False
+    finally:
+        _analysis_lock.release()
+        logger.info("🤖 [실시간 AI 분석] 백그라운드 분석 스레드가 안전하게 종료되었습니다.")
 
 
 # ---- 파이프라인 작업 함수들 ---------------------------------
@@ -40,6 +109,13 @@ def job_fetch_news():
         _log_pipeline(source="news", status="success",
                       fetched=result["fetched"], skipped=result["skipped"], saved=result["saved"])
         logger.info(f"✅ [뉴스 파이프라인] 완료 ({elapsed:.1f}초)")
+
+        # Step 2: 실시간 분석 트리거 (새로 저장된 기사가 존재하는 경우 즉시 시작)
+        if result.get("saved", 0) > 0:
+            logger.info(f"🆕 새로 저장된 뉴스가 {result['saved']}건 있습니다. 실시간 백그라운드 LLM 분석을 트리거합니다.")
+            t = threading.Thread(target=_run_background_analysis, name="LiveAnalysisThread")
+            t.daemon = True
+            t.start()
 
     except Exception as e:
         _log_pipeline(source="news", status="failure", error_msg=str(e))
