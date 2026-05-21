@@ -5,7 +5,8 @@ from db.vector_store import (
     get_youtube_sources, add_youtube_source, toggle_youtube_source, delete_youtube_source,
     get_recommended_sources, update_recommended_source_status, clear_all_data,
     get_available_lms_models, get_system_setting, set_system_setting,
-    get_domains, add_domain, delete_domain
+    get_domains, add_domain, delete_domain,
+    get_instant_seed_sources, inject_recommended_sources
 )
 from scheduler.pipeline_scheduler import update_analysis_schedule
 from engine.source_explorer import discover_sources
@@ -139,15 +140,15 @@ def render_tab_settings(is_live):
                         st.rerun()
                 st.markdown("---")
  
-        st.markdown("#### 💡 AI 추천 소스 제안")
-        st.caption(f"'{dom_name}' 도메인과 연동하여 AI가 자율적으로 발굴한 수집 소스 후보입니다. 승인 시 수집 소스에 추가됩니다.")
+        st.markdown("#### 🤖 AI 실시간 소스 발굴 및 즉석 추천")
+        st.caption(f"'{dom_name}' 도메인을 완벽히 모니터링하기 위해 AI가 실시간으로 웹에서 전문 매체, 뉴스레터 RSS, 유튜브 채널을 발굴합니다.")
         
-        # AI 자율 탐색 트리거 버튼 추가 (도메인 전달)
-        if st.button("🔍 AI에게 새로운 수집 소스 발굴 시키기", use_container_width=True):
+        # AI 실시간 자율 탐색 트리거
+        if st.button("✨ 실시간 AI 소스 발굴 개시 (1분 소요)", use_container_width=True, type="primary"):
             if is_live:
-                with st.spinner(f"AI가 인터넷을 탐색하며 '{dom_name}' 관련 RSS 및 유튜브 채널을 발굴 중입니다... (약 1분 소요)"):
-                    discover_sources(domain_key=selected_domain_key)
-                st.success("✅ AI 탐색 완료! 아래 목록에서 발굴된 소스를 확인하세요.")
+                with st.spinner(f"AI가 현재 도메인('{dom_name}')의 성격을 심층 분석하고 실시간 쿼리를 동적 생성하여 인터넷을 탐색 중입니다..."):
+                    get_instant_seed_sources(domain_key=selected_domain_key)
+                st.success("✅ AI 실시간 소스 발굴 및 검증이 완료되었습니다! 아래에서 승인 후 등록해 주세요.")
                 st.rerun()
             else:
                 st.error("DB 연결이 필요합니다.")
@@ -156,40 +157,54 @@ def render_tab_settings(is_live):
         pending_recs = [r for r in recommendations if r['status'] == 'pending']
         
         if not pending_recs:
-            st.info("현재 대기 중인 추천 소스가 없습니다. 위 버튼을 눌러 AI에게 탐색을 시켜보세요!")
+            st.info("💡 대기 중인 추천 소스가 없습니다. 위 버튼을 눌러 AI에게 실시간 자율 발굴을 지시해 보세요!")
         else:
-            for rec in pending_recs:
-                rc1, rc2, rc3 = st.columns([6, 2, 2])
-                with rc1:
-                    type_icon = "📺" if rec['source_type'] in ['video', 'youtube'] else "📰"
-                    st.markdown(f"{type_icon} **{rec['label']}**<br><span style='font-size:0.75rem;color:#94a3b8;'>{rec['url']}</span><br><span style='font-size:0.8rem;color:#64748b;'>추천 이유: {rec['reason']}</span>", unsafe_allow_html=True)
-                with rc2:
-                    if st.button("✅ 승인", key=f"rec_ok_{rec['id']}", type="primary", use_container_width=True):
-                        is_duplicate = False
-                        if rec['source_type'] in ['video', 'youtube']:
-                            if any(s['channel_url'] == rec['url'] for s in yt_sources):
-                                is_duplicate = True
-                        else:
-                            if any(s['url'] == rec['url'] for s in sources):
-                                is_duplicate = True
-                        
-                        if is_duplicate:
-                            st.warning("⚠️ 이미 동일한 URL의 소스가 등록되어 있습니다.")
-                            update_recommended_source_status(rec['id'], "rejected")
-                        else:
-                            update_recommended_source_status(rec['id'], "approved")
-                            new_name = "".join(filter(str.isalnum, rec['label'].lower())).replace(" ", "_")
-                            if rec['source_type'] in ['video', 'youtube']:
-                                add_youtube_source("youtube_" + new_name, rec['url'], rec['label'], domain_key=selected_domain_key)
-                            else:
-                                add_news_source(new_name, rec['url'], rec['label'], domain_key=selected_domain_key)
-                            st.toast(f"{rec['label']} 등록 완료!")
+            st.markdown(f"##### 🎯 발굴된 추천 소스 목록 ({len(pending_recs)}건)")
+            st.markdown("체크박스를 선택한 후 하단의 일괄 등록 버튼을 클릭하여 소스 수집에 즉시 투입하세요.")
+            
+            # 다중 선택 UI
+            selected_urls = []
+            
+            for idx, rec in enumerate(pending_recs):
+                type_icon = "📺" if rec['source_type'] in ['video', 'youtube'] else "📰"
+                type_label = "유튜브 채널" if rec['source_type'] in ['video', 'youtube'] else "뉴스/RSS"
+                
+                # 가독성이 높은 Card Style Container 렌더링
+                with st.container(border=True):
+                    col_chk, col_info = st.columns([1, 19])
+                    with col_chk:
+                        is_selected = st.checkbox("", value=True, key=f"chk_rec_{rec['id']}_{idx}")
+                        if is_selected:
+                            selected_urls.append(rec['url'])
+                    with col_info:
+                        st.markdown(
+                            f"**{type_icon} {rec['label']}** <span style='font-size:0.75rem;color:#3b82f6;background-color:#eff6ff;padding:2px 6px;border-radius:4px;'>{type_label}</span><br>"
+                            f"<span style='font-size:0.75rem;color:#64748b;'>{rec['url']}</span><br>"
+                            f"<span style='font-size:0.85rem;color:#1e293b;font-weight:500;'>💡 AI 추천 이유: {rec['reason']}</span>", 
+                            unsafe_allow_html=True
+                        )
+            
+            # 일괄 등록 버튼
+            st.markdown("<br>", unsafe_allow_html=True)
+            col_act1, col_act2 = st.columns(2)
+            with col_act1:
+                if st.button("🚀 선택한 소스 일괄 등록", use_container_width=True, type="primary"):
+                    if selected_urls:
+                        news_add, yt_add = inject_recommended_sources(selected_domain_key, selected_urls)
+                        st.success(f"✅ 뉴스 {news_add}개, 유튜브 {yt_add}개 채널이 수집 소스에 정상 등록되었습니다!")
+                        import time
+                        time.sleep(1)
                         st.rerun()
-                with rc3:
-                    if st.button("거절", key=f"rec_no_{rec['id']}", use_container_width=True):
+                    else:
+                        st.warning("선택된 소스가 없습니다.")
+            with col_act2:
+                if st.button("❌ 대기 중인 추천 모두 거절", use_container_width=True, type="secondary"):
+                    for rec in pending_recs:
                         update_recommended_source_status(rec['id'], "rejected")
-                        st.rerun()
-                st.markdown("---")
+                    st.toast("추천 목록이 거절 및 정리되었습니다.")
+                    import time
+                    time.sleep(1)
+                    st.rerun()
  
     # --- 서브 탭 2: 시스템 제어 ---
     with sub_tab_system:

@@ -873,3 +873,87 @@ def delete_domain(key: str):
         session.commit()
     finally:
         session.close()
+
+
+def inject_recommended_sources(domain_key: str, selected_urls: list[str]) -> tuple[int, int]:
+    """
+    추천 소스 중 사용자가 선택한 URL들을 실제 수집 소스 테이블로 일괄 이관합니다.
+    Returns: (news_added, youtube_added)
+    """
+    if not selected_urls:
+        return 0, 0
+    
+    session = _get_session()
+    news_added = 0
+    youtube_added = 0
+    try:
+        # 선택된 URL에 해당하는 추천 소스 조회
+        result = session.execute(text("""
+            SELECT url, source_type, label, reason 
+            FROM recommended_sources 
+            WHERE domain_key = :domain_key AND url IN :urls AND status = 'pending'
+        """), {"domain_key": domain_key, "urls": tuple(selected_urls)})
+        
+        sources = result.fetchall()
+        
+        for url, source_type, label, reason in sources:
+            label = label or "추천 소스"
+            
+            # 중복 방지를 위한 name 생성 (소문자, 알파벳/숫자 외 제거)
+            import re
+            name_clean = re.sub(r'[^a-zA-Z0-9]', '_', label.lower()).strip('_')
+            if not name_clean:
+                name_clean = "discovered_source_" + str(uuid.uuid4())[:8]
+                
+            if source_type == 'news':
+                # news_sources에 존재 여부 체크
+                dup = session.execute(text("SELECT id FROM news_sources WHERE domain_key = :dk AND (url = :url OR name = :name)"), 
+                                      {"dk": domain_key, "url": url, "name": name_clean}).fetchone()
+                if not dup:
+                    session.execute(text("""
+                        INSERT INTO news_sources (domain_key, name, url, label, is_active)
+                        VALUES (:domain_key, :name, :url, :label, TRUE)
+                    """), {"domain_key": domain_key, "name": name_clean, "url": url, "label": label})
+                    news_added += 1
+            else:
+                # youtube_sources에 존재 여부 체크
+                dup = session.execute(text("SELECT id FROM youtube_sources WHERE domain_key = :dk AND (channel_url = :url OR name = :name)"), 
+                                      {"dk": domain_key, "url": url, "name": name_clean}).fetchone()
+                if not dup:
+                    session.execute(text("""
+                        INSERT INTO youtube_sources (domain_key, name, channel_url, label, is_active)
+                        VALUES (:domain_key, :name, :url, :label, TRUE)
+                    """), {"domain_key": domain_key, "name": name_clean, "url": url, "label": label})
+                    youtube_added += 1
+                    
+            # 상태를 approved로 업데이트
+            session.execute(text("""
+                UPDATE recommended_sources 
+                SET status = 'approved' 
+                WHERE domain_key = :domain_key AND url = :url
+            """), {"domain_key": domain_key, "url": url})
+            
+        session.commit()
+        return news_added, youtube_added
+    except Exception as e:
+        session.rollback()
+        logger.error(f"추천 소스 이관 실패: {e}")
+        return 0, 0
+    finally:
+        session.close()
+
+
+def get_instant_seed_sources(domain_key: str) -> list[dict]:
+    """
+    인터넷 실시간 검색 및 LLM을 사용하여 현재 도메인 전용 시드 소스들을 즉석에서 발굴하고 반환합니다.
+    """
+    from engine.source_explorer import discover_sources
+    try:
+        # AI 자율 소스 발굴 프로세스 즉각 구동
+        discover_sources(domain_key=domain_key)
+    except Exception as e:
+        logger.error(f"실시간 AI 소스 탐색 구동 실패: {e}")
+        
+    # 방금 수집된 추천 소스 반환
+    return get_recommended_sources(domain_key=domain_key)
+
