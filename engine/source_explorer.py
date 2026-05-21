@@ -34,10 +34,12 @@ def generate_dynamic_queries(domain_info: dict) -> list[dict]:
 우리는 '{dom_name}'(관심 키워드: {keywords}) 분야의 뉴스 및 영상을 수집하기 위해 웹 검색(DuckDuckGo)을 수행하려고 합니다.
 이 도메인을 전방위적으로 모니터링하기 위해 가장 신뢰도 높은 '전문 매체', '뉴스레터 RSS 피드', '공식 블로그', '유튜브 크리에이터 설명 채널'을 발굴할 수 있는 최적의 영어 및 한국어 검색 쿼리 6종을 생성하세요.
 
+특히, 뉴스 수집 소스(search_type: "news")용 쿼리는 반드시 단순 웹 페이지가 아니라 실제 작동하는 RSS/XML 피드 경로가 잘 잡히도록 "rss", "rss feed", "xml feed", "rss.xml", "/feed"와 같은 피드 관련 키워드가 쿼리 문자열 내에 강하게 결합되도록 설계하세요.
+
 쿼리 유형 정의:
-1. global_news_expert: 글로벌 전문 테크 미디어/블로그 탐색용 (예: "domain_name tech news rss OR blog")
-2. global_newsletter: 글로벌 전문 뉴스레터/동향 RSS 탐색용 (예: "domain_name newsletter rss feed")
-3. local_news: 국내 전문 미디어 및 커뮤니티 탐색용 (예: "domain_name IT 뉴스 블로그 RSS")
+1. global_news_expert: 글로벌 전문 테크 미디어/블로그 RSS 탐색용 (예: "domain_name tech news rss feed OR xml")
+2. global_newsletter: 글로벌 전문 뉴스레터/동향 RSS 탐색용 (예: "domain_name newsletter rss.xml OR feed")
+3. local_news: 국내 전문 미디어 및 커뮤니티 RSS 탐색용 (예: "domain_name 전문 IT 블로그 RSS 피드")
 4. global_youtube_official: 글로벌 유튜브 공식/기관 채널 탐색용 (예: "domain_name official youtube channel")
 5. global_youtube_creator: 글로벌 전문 유튜브 크리에이터/해설 채널 탐색용 (예: "domain_name tech explanation channel youtube")
 6. local_youtube: 국내 전문 유튜브 크리에이터 채널 탐색용 (예: "domain_name 전문 유튜브 채널")
@@ -138,6 +140,8 @@ def discover_sources(domain_key: str = "home_robot"):
 다음은 쿼리 '{query}'로 검색한 웹 결과입니다.
 이 중 '{dom_info['name']}' 도메인의 양질의 모니터링을 위해 수집할 가치가 있는 '전문 블로그/RSS' 또는 '유튜브 채널'의 URL이 있다면 하나만 추출하세요.
 단순 검색 포털이나 단순 위키백과 등 수집 가치가 없는 정보라면 빈 문자열을 반환하세요.
+
+특히, 뉴스 수집 소스(source_type: "news")인 경우에는 단순 회사 소개 메인 홈페이지나 블로그 루트 메인 주소보다, 실제 RSS XML 피드 주소(예: "/feed.xml", "/feed/", ".xml", "/rss" 등이 들어간 URL) 또는 RSS 링크가 잘 탑재된 진짜 피드 주소를 최우선으로 선별하여 추출하세요.
 
 검색 결과:
 {json.dumps(results, ensure_ascii=False, indent=2)}

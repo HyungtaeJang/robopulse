@@ -195,6 +195,62 @@ def _extract_rss_image(entry) -> Optional[str]:
     return None
 
 
+def discover_rss_feed(url: str) -> str:
+    """
+    일반 HTML 페이지 내의 메타태그에서 표준 XML 피드 주소를 역추적하고 자동 변환합니다.
+    """
+    if not url:
+        return url
+        
+    low_url = url.lower()
+    # 이미 명시적인 피드 주소 형식인 경우 즉시 반환
+    if low_url.endswith((".xml", ".rss", ".atom")) or "/feed" in low_url or ("rss" in low_url and "feed" in low_url):
+        return url
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+    }
+
+    try:
+        with httpx.Client(headers=headers, proxy=None, trust_env=False, timeout=10.0, follow_redirects=True) as client:
+            resp = client.get(url)
+            if resp.status_code != 200:
+                return url
+            
+            # 이미 피드 XML 내용이라면 그대로 반환
+            content_type = resp.headers.get("content-type", "").lower()
+            if "xml" in content_type or "rss" in content_type or "atom" in content_type:
+                return url
+                
+            soup = BeautifulSoup(resp.text, "lxml")
+            
+            # 1. <link rel="alternate" ...> 메타태그 탐색
+            for link in soup.find_all("link", rel="alternate"):
+                ltype = link.get("type", "").lower()
+                if "rss+xml" in ltype or "atom+xml" in ltype or "xml" in ltype:
+                    href = link.get("href")
+                    if href:
+                        discovered_url = urljoin(url, href)
+                        logger.info(f"   💡 [RSS Auto-Discovery] 메타태그에서 RSS 피드 자동 발견: {discovered_url}")
+                        return discovered_url
+            
+            # 2. <a> 태그 중 href에 'rss' 또는 'feed'가 포함된 명시적 피드 링크 탐색
+            for a in soup.find_all("a", href=True):
+                href = a.get("href")
+                low_href = href.lower()
+                if "rss" in low_href or "feed" in low_href or low_href.endswith(".xml"):
+                    if "feedly.com" not in low_href and "feedburner.com" not in low_href:
+                        discovered_url = urljoin(url, href)
+                        logger.info(f"   💡 [RSS Auto-Discovery] a 태그에서 RSS 피드 자동 발견: {discovered_url}")
+                        return discovered_url
+                        
+    except Exception as e:
+        logger.debug(f"RSS 피드 자동 발견 중 예외 발생 ({url}): {e}")
+
+    # 발견하지 못하면 원본 url로 시도하도록 폴백 반환
+    return url
+
+
 # ---- 핵심 수집 함수 -----------------------------------------
 def fetch_rss_source(source: dict, domain_key: str = "home_robot") -> tuple[int, int, int]:
     """
@@ -206,8 +262,17 @@ def fetch_rss_source(source: dict, domain_key: str = "home_robot") -> tuple[int,
     fetched = skipped = saved = 0
 
     try:
-        feed = feedparser.parse(source["url"])
+        # 스마트 RSS Auto-Discovery 적용
+        original_url = source["url"]
+        target_url = discover_rss_feed(original_url)
+        
+        feed = feedparser.parse(target_url)
         entries = feed.entries[:MAX_PER_SOURCE]
+        
+        if not entries:
+            logger.warning(f"⚠️ [{source['name']}] RSS 피드 수집 불가 (유효한 피드 항목이 없음): {target_url}")
+            return 0, 0, 0
+            
         fetched = len(entries)
 
         for entry in entries:
