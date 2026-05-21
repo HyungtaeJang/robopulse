@@ -13,28 +13,33 @@ import networkx as nx
 logger = logging.getLogger(__name__)
 
 # ---- 전역 그래프 인스턴스 -----------------------------------
-# 애플리케이션 생명주기 내에서 누적됨 (재시작 시 DB에서 복원)
-_knowledge_graph: nx.DiGraph = nx.DiGraph()
+# 도메인별 격리 메모리 지식 그래프 관리
+_knowledge_graphs: dict[str, nx.DiGraph] = {}
 
 
-def get_graph() -> nx.DiGraph:
-    return _knowledge_graph
+def get_graph(domain_key: str = "home_robot") -> nx.DiGraph:
+    """특정 도메인의 DiGraph 인스턴스를 반환합니다."""
+    if domain_key not in _knowledge_graphs:
+        _knowledge_graphs[domain_key] = nx.DiGraph()
+    return _knowledge_graphs[domain_key]
 
 
 def add_analysis_to_graph(
     article_id: str,
     entities: list[dict],
     relations: list[dict],
+    domain_key: str = "home_robot",
 ) -> None:
     """
-    단일 기사의 분석 결과를 지식 그래프에 추가합니다.
+    단일 기사의 분석 결과를 특정 도메인의 지식 그래프에 추가합니다.
 
     Args:
         article_id: 기사 고유 ID
         entities: [{"name": ..., "type": ...}, ...]
         relations: [{"subject": ..., "predicate": ..., "object": ...}, ...]
+        domain_key: 도메인 식별 키
     """
-    G = _knowledge_graph
+    G = get_graph(domain_key)
 
     # 엔티티 노드 추가
     for entity in entities:
@@ -67,12 +72,12 @@ def add_analysis_to_graph(
         else:
             G.add_edge(subj, obj, weight=1, predicates=[pred], articles=[article_id])
 
-    logger.debug(f"그래프 업데이트: 노드 {G.number_of_nodes()}개, 엣지 {G.number_of_edges()}개")
+    logger.debug(f"[{domain_key}] 그래프 업데이트: 노드 {G.number_of_nodes()}개, 엣지 {G.number_of_edges()}개")
 
 
-def get_entity_stats() -> list[dict]:
-    """언급 횟수 기준 상위 엔티티 목록을 반환합니다."""
-    G = _knowledge_graph
+def get_entity_stats(domain_key: str = "home_robot") -> list[dict]:
+    """해당 도메인의 언급 횟수 기준 상위 엔티티 목록을 반환합니다."""
+    G = get_graph(domain_key)
     stats = []
     for node, attrs in G.nodes(data=True):
         stats.append({
@@ -84,9 +89,9 @@ def get_entity_stats() -> list[dict]:
     return sorted(stats, key=lambda x: x["mention_count"], reverse=True)
 
 
-def get_related_entities(entity_name: str, depth: int = 2) -> dict:
-    """특정 엔티티와 연결된 이웃 노드와 엣지를 반환합니다 (RAG 지원)."""
-    G = _knowledge_graph
+def get_related_entities(entity_name: str, depth: int = 2, domain_key: str = "home_robot") -> dict:
+    """특정 도메인의 특정 엔티티와 연결된 이웃 노드와 엣지를 반환합니다 (RAG 지원)."""
+    G = get_graph(domain_key)
     if not G.has_node(entity_name):
         return {"nodes": [], "edges": []}
 
@@ -107,13 +112,13 @@ def get_related_entities(entity_name: str, depth: int = 2) -> dict:
     return {"nodes": nodes, "edges": edges}
 
 
-def rebuild_from_db(db_relations: list[dict]) -> None:
+def rebuild_from_db(db_relations: list[dict], domain_key: str = "home_robot") -> None:
     """
-    애플리케이션 재시작 시 DB에 저장된 관계 데이터로 그래프를 재구성합니다.
+    애플리케이션 재시작 시 DB에 저장된 관계 데이터로 특정 도메인의 그래프를 재구성합니다.
     db_relations: [{"subject": ..., "predicate": ..., "object": ..., "article_id": ...}]
     """
-    global _knowledge_graph
-    _knowledge_graph = nx.DiGraph()
+    global _knowledge_graphs
+    _knowledge_graphs[domain_key] = nx.DiGraph()
     for row in db_relations:
         add_analysis_to_graph(
             article_id=str(row.get("article_id", "")),
@@ -122,5 +127,6 @@ def rebuild_from_db(db_relations: list[dict]) -> None:
                 {"name": row["object"], "type": row.get("obj_type", "unknown")},
             ],
             relations=[row],
+            domain_key=domain_key,
         )
-    logger.info(f"그래프 재구성 완료: 노드 {_knowledge_graph.number_of_nodes()}개")
+    logger.info(f"[{domain_key}] 그래프 재구성 완료: 노드 {_knowledge_graphs[domain_key].number_of_nodes()}개")

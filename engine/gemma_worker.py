@@ -71,6 +71,7 @@ def analyze_article(
     title: str,
     content: str,
     source: str = "",
+    domain_key: str = "home_robot",
     model_name: Optional[str] = None,
     max_content_chars: int = 6000,
 ) -> Optional[ArticleAnalysis]:
@@ -81,11 +82,16 @@ def analyze_article(
         title: 기사 제목
         content: 기사 본문 (자동으로 max_content_chars로 잘림)
         source: 수집 출처
+        domain_key: 도메인 식별 키
         max_content_chars: 컨텍스트 길이 제한
 
     Returns:
         ArticleAnalysis 객체, 실패 시 None
     """
+    from db.vector_store import get_domain
+    domain_info = get_domain(domain_key)
+    domain_name = domain_info["name"] if domain_info else "홈로봇"
+
     truncated_content = content[:max_content_chars]
 
     user_prompt = _render_prompt(
@@ -93,8 +99,13 @@ def analyze_article(
         title=title,
         source=source,
         content=truncated_content,
+        domain_name=domain_name,
     )
-    system_prompt = _load_system_prompt()
+    
+    if domain_info and domain_info.get("system_prompt"):
+        system_prompt = domain_info["system_prompt"]
+    else:
+        system_prompt = _load_system_prompt()
 
     try:
         client = get_lms_client()
@@ -141,15 +152,16 @@ def analyze_article(
     return None
 
 
-def batch_analyze(articles: list[dict]) -> list[Optional[ArticleAnalysis]]:
+def batch_analyze(articles: list[dict], domain_key: str = "home_robot") -> list[Optional[ArticleAnalysis]]:
     """여러 기사를 순차적으로 분석합니다."""
     results = []
     for i, article in enumerate(articles, 1):
-        logger.info(f"분석 중 [{i}/{len(articles)}]: {article.get('title', '')[:50]}")
+        logger.info(f"[{domain_key}] 분석 중 [{i}/{len(articles)}]: {article.get('title', '')[:50]}")
         result = analyze_article(
             title=article.get("title", ""),
             content=article.get("content", ""),
             source=article.get("source", ""),
+            domain_key=domain_key,
         )
         results.append(result)
     return results

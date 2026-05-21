@@ -49,6 +49,7 @@ def is_valid_image(img_url: str) -> bool:
 class RawArticle:
     url: str
     source: str
+    domain_key: str = "home_robot"
     source_type: str = "news"
     title: str = ""
     content: str = ""
@@ -195,7 +196,7 @@ def _extract_rss_image(entry) -> Optional[str]:
 
 
 # ---- 핵심 수집 함수 -----------------------------------------
-def fetch_rss_source(source: dict) -> tuple[int, int, int]:
+def fetch_rss_source(source: dict, domain_key: str = "home_robot") -> tuple[int, int, int]:
     """
     단일 RSS 소스를 수집하여 DB에 저장합니다.
 
@@ -237,6 +238,7 @@ def fetch_rss_source(source: dict) -> tuple[int, int, int]:
             article = RawArticle(
                 url=url,
                 source=source["name"],
+                domain_key=domain_key,
                 title=entry.get("title", ""),
                 content=content or entry.get("summary", ""),
                 author=entry.get("author"),
@@ -254,17 +256,17 @@ def fetch_rss_source(source: dict) -> tuple[int, int, int]:
     return fetched, skipped, saved
 
 
-def run_all_sources() -> dict:
-    """모든 RSS 소스를 DB에서 조회하여 순차적으로 수집합니다."""
+def run_all_sources(domain_key: str = "home_robot") -> dict:
+    """특정 도메인의 모든 RSS 소스를 DB에서 조회하여 순차적으로 수집합니다."""
     total = {"fetched": 0, "skipped": 0, "saved": 0}
     
-    # DB에서 활성화된 소스 목록 가져오기
-    sources = get_news_sources(active_only=True)
+    # DB에서 해당 도메인의 활성화된 소스 목록 가져오기
+    sources = get_news_sources(active_only=True, domain_key=domain_key)
     max_per = int(os.getenv("MAX_ARTICLES_PER_SOURCE", "20"))
 
     for source in sources:
-        logger.info(f"수집 시작: {source['label']}")
-        f, sk, sv = fetch_rss_source(source)
+        logger.info(f"[{domain_key}] 수집 시작: {source['label']}")
+        f, sk, sv = fetch_rss_source(source, domain_key=domain_key)
         total["fetched"] += f
         total["skipped"] += sk
         total["saved"] += sv

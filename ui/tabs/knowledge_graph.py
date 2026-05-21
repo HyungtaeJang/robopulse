@@ -8,7 +8,7 @@ def render_tab_graph(is_live, get_graph_func):
     col_g1, col_g2 = st.columns([3, 1])
     
     with col_g1:
-        G_full = get_graph_func() if is_live else nx.DiGraph()
+        G_full = get_graph_func(domain_key=st.session_state.selected_domain_key) if is_live else nx.DiGraph()
         
     with col_g2:
         st.markdown("### 그래프 필터")

@@ -3,10 +3,22 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- ============================
+-- 도메인 관리 테이블
+-- ============================
+CREATE TABLE IF NOT EXISTS domains (
+    key          TEXT PRIMARY KEY,                  -- 도메인 식별자 (예: 'home_robot', 'ev', 'ai')
+    name         TEXT UNIQUE NOT NULL,               -- 도메인 UI용 한글 이름
+    keywords     TEXT[],                             -- 뉴스 수집/검색용 키워드 목록
+    system_prompt TEXT,                             -- 도메인별 맞춤형 LLM 분석 프롬프트 가이드
+    created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================
 -- 수집된 원문 기사 / 영상
 -- ============================
 CREATE TABLE IF NOT EXISTS articles (
     id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    domain_key      TEXT DEFAULT 'home_robot' REFERENCES domains(key) ON DELETE SET NULL, -- 소속 도메인
     url_hash        TEXT UNIQUE NOT NULL,           -- SHA-256(url), 중복 방지 키
     url             TEXT NOT NULL,
     source          TEXT NOT NULL,                  -- 예: "ieee_spectrum", "youtube_boston_dynamics"
@@ -89,6 +101,7 @@ CREATE INDEX IF NOT EXISTS idx_tags_category ON tags(category);
 -- ============================
 CREATE TABLE IF NOT EXISTS pipeline_logs (
     id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    domain_key  TEXT DEFAULT 'home_robot' REFERENCES domains(key) ON DELETE CASCADE,
     run_at      TIMESTAMPTZ DEFAULT NOW(),
     source      TEXT,                               -- 어떤 소스를 수집했는지
     status      TEXT CHECK (status IN ('success', 'failure', 'partial')),
@@ -102,6 +115,7 @@ CREATE TABLE IF NOT EXISTS pipeline_logs (
 -- ============================
 CREATE TABLE IF NOT EXISTS news_sources (
     id          SERIAL PRIMARY KEY,
+    domain_key  TEXT DEFAULT 'home_robot' REFERENCES domains(key) ON DELETE CASCADE,
     name        TEXT UNIQUE NOT NULL,               -- 시스템 내부 식별자 (예: "techcrunch")
     url         TEXT NOT NULL,                      -- RSS 피드 주소
     label       TEXT NOT NULL,                      -- UI 표시용 이름 (예: "TechCrunch - Robotics")
@@ -110,3 +124,5 @@ CREATE TABLE IF NOT EXISTS news_sources (
 );
 
 CREATE INDEX IF NOT EXISTS idx_news_sources_active ON news_sources(is_active);
+CREATE INDEX IF NOT EXISTS idx_articles_domain ON articles(domain_key);
+CREATE INDEX IF NOT EXISTS idx_news_sources_domain ON news_sources(domain_key);

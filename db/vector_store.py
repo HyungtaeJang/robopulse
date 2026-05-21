@@ -34,9 +34,32 @@ def _get_engine():
         _engine = create_engine(DATABASE_URL, pool_pre_ping=True)
         _Session = sessionmaker(bind=_engine)
         
-        # Self-Healing: thumbnail_url 컬럼 자동 생성 및 백필
+        # Self-Healing: 다중 도메인 지원 마이그레이션
         try:
             with _engine.connect() as conn:
+                # 0. domains 테이블 및 기본 도메인(홈로봇) 자동 생성
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS domains (
+                        key          TEXT PRIMARY KEY,
+                        name         TEXT UNIQUE NOT NULL,
+                        keywords     TEXT[],
+                        system_prompt TEXT,
+                        created_at   TIMESTAMPTZ DEFAULT NOW()
+                    );
+                """))
+                
+                conn.execute(text("""
+                    INSERT INTO domains (key, name, keywords)
+                    VALUES ('home_robot', '홈로봇', ARRAY['home robot', 'domestic robot', 'service robot', 'lg cloi', 'samsung robot'])
+                    ON CONFLICT (key) DO NOTHING;
+                """))
+
+                # 기존 테이블들에 domain_key 컬럼 추가 및 백필
+                tables_to_migrate = ["articles", "news_sources", "youtube_sources", "recommended_sources", "pipeline_logs"]
+                for tbl in tables_to_migrate:
+                    conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS domain_key TEXT DEFAULT 'home_robot';"))
+                    conn.execute(text(f"UPDATE {tbl} SET domain_key = 'home_robot' WHERE domain_key IS NULL;"))
+
                 conn.execute(text("ALTER TABLE articles ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;"))
                 conn.execute(text("ALTER TABLE articles ADD COLUMN IF NOT EXISTS key_points TEXT;"))
                 
@@ -201,6 +224,7 @@ def save_article(article) -> Optional[str]:
     url_hash = hashlib.sha256(article.url.strip().encode()).hexdigest()
     embed_text = f"{article.title}\n\n{article.content[:1500]}"
     embedding = _generate_embedding(embed_text)
+    domain_key = getattr(article, "domain_key", "home_robot")
 
     # 1. 시맨틱 중복 체크 (선택 사항)
     is_dedup_enabled = get_system_setting("semantic_dedup_enabled", "True") == "True"
@@ -209,7 +233,7 @@ def save_article(article) -> Optional[str]:
         threshold_str = get_system_setting("semantic_dedup_threshold", "0.95")
         threshold = float(threshold_str) if threshold_str else 0.95
         
-        dup_article = _check_semantic_duplicate(embedding, threshold=threshold, days=3)
+        dup_article = _check_semantic_duplicate(embedding, threshold=threshold, days=3, domain_key=domain_key)
         if dup_article:
             logger.info(f"[스킵] 유사 기사 발견: '{article.title}' <-> '{dup_article['title']}' (유사도: {dup_article['similarity']:.3f})")
             return None
@@ -220,13 +244,14 @@ def save_article(article) -> Optional[str]:
         embedding_str = f"[{','.join(str(v) for v in embedding)}]" if embedding else None
 
         session.execute(text("""
-            INSERT INTO articles (id, url_hash, url, source, source_type, title, content,
+            INSERT INTO articles (id, domain_key, url_hash, url, source, source_type, title, content,
                                   author, published_at, thumbnail_url, embedding)
-            VALUES (:id, :url_hash, :url, :source, :source_type, :title, :content,
+            VALUES (:id, :domain_key, :url_hash, :url, :source, :source_type, :title, :content,
                     :author, :published_at, :thumbnail_url, CAST(:embedding AS vector))
             ON CONFLICT (url_hash) DO NOTHING
         """), {
             "id": article_id,
+            "domain_key": domain_key,
             "url_hash": url_hash,
             "url": article.url,
             "source": article.source,
@@ -248,7 +273,7 @@ def save_article(article) -> Optional[str]:
         session.close()
 
 
-def _check_semantic_duplicate(embedding: list[float], threshold: float = 0.95, days: int = 3) -> Optional[dict]:
+def _check_semantic_duplicate(embedding: list[float], threshold: float = 0.95, days: int = 3, domain_key: str = "home_robot") -> Optional[dict]:
     """
     주어진 임베딩과 유사한 기사가 최근 N일 이내에 존재하는지 확인합니다.
     """
@@ -261,7 +286,8 @@ def _check_semantic_duplicate(embedding: list[float], threshold: float = 0.95, d
         query = text(f"""
             SELECT title, 1 - (embedding <=> :embedding) as similarity
             FROM articles
-            WHERE created_at >= NOW() - INTERVAL '{days} days'
+            WHERE domain_key = :domain_key
+            AND created_at >= NOW() - INTERVAL '{days} days'
             AND 1 - (embedding <=> :embedding) >= :threshold
             ORDER BY similarity DESC
             LIMIT 1
@@ -269,7 +295,8 @@ def _check_semantic_duplicate(embedding: list[float], threshold: float = 0.95, d
         
         result = session.execute(query, {
             "embedding": f"[{','.join(str(v) for v in embedding)}]",
-            "threshold": threshold
+            "threshold": threshold,
+            "domain_key": domain_key
         }).fetchone()
         
         if result:
@@ -366,7 +393,7 @@ def save_analysis_result(article_id: str, analysis) -> None:
         session.close()
 
 
-def semantic_search(query: str, top_k: int = 10) -> list[dict]:
+def semantic_search(query: str, top_k: int = 10, domain_key: str = "home_robot") -> list[dict]:
     """
     자연어 쿼리를 벡터로 변환하여 의미론적으로 유사한 기사를 검색합니다 (RAG).
     """
@@ -384,11 +411,11 @@ def semantic_search(query: str, top_k: int = 10) -> list[dict]:
                    1 - (a.embedding <=> CAST(:embedding AS vector)) AS similarity
             FROM articles a
             LEFT JOIN tags t ON a.id = t.article_id
-            WHERE a.is_processed = TRUE AND a.embedding IS NOT NULL
+            WHERE a.domain_key = :domain_key AND a.is_processed = TRUE AND a.embedding IS NOT NULL
             GROUP BY a.id
             ORDER BY a.embedding <=> CAST(:embedding AS vector)
             LIMIT :top_k
-        """), {"embedding": embedding_str, "top_k": top_k})
+        """), {"embedding": embedding_str, "top_k": top_k, "domain_key": domain_key})
 
         rows = result.fetchall()
         return [dict(row._mapping) for row in rows]
@@ -426,7 +453,7 @@ def set_system_setting(key: str, value: str) -> None:
         session.close()
 
 
-def get_unprocessed_articles(limit: int = 100) -> list[dict]:
+def get_unprocessed_articles(limit: int = 100, domain_key: str = None) -> list[dict]:
     """LLM 분석이 아직 안 된 기사 목록을 반환합니다."""
     session = _get_session()
     try:
@@ -434,18 +461,24 @@ def get_unprocessed_articles(limit: int = 100) -> list[dict]:
             SELECT id, title, content, source
             FROM articles
             WHERE is_processed = FALSE
-            ORDER BY collected_at ASC
         """
+        params = {}
+        if domain_key:
+            query += " AND domain_key = :domain_key"
+            params["domain_key"] = domain_key
+            
+        query += " ORDER BY collected_at ASC"
         if limit is not None:
             query += " LIMIT :limit"
+            params["limit"] = limit
         
-        result = session.execute(text(query), {"limit": limit} if limit is not None else {})
+        result = session.execute(text(query), params)
         return [dict(row._mapping) for row in result.fetchall()]
     finally:
         session.close()
 
 
-def get_pipeline_stats() -> dict:
+def get_pipeline_stats(domain_key: str = "home_robot") -> dict:
     """모니터링 대시보드용 파이프라인 통계를 반환합니다."""
     session = _get_session()
     try:
@@ -459,16 +492,18 @@ def get_pipeline_stats() -> dict:
                 COUNT(*) FILTER (WHERE is_processed = FALSE) AS pending,
                 COUNT(*) AS total
             FROM articles
-        """))
+            WHERE domain_key = :domain_key
+        """), {"domain_key": domain_key})
         row = result.fetchone()
         stats.update(dict(row._mapping))
 
         result2 = session.execute(text("""
             SELECT source, COUNT(*) AS count, MAX(collected_at) AS last_collected
             FROM articles
+            WHERE domain_key = :domain_key
             GROUP BY source
             ORDER BY last_collected DESC
-        """))
+        """), {"domain_key": domain_key})
         stats["sources"] = [dict(r._mapping) for r in result2.fetchall()]
 
         return stats
@@ -524,7 +559,7 @@ def get_available_lms_models() -> list[str]:
         return []
 
 
-def get_all_relations() -> list[dict]:
+def get_all_relations(domain_key: str = "home_robot") -> list[dict]:
     """지식 그래프 복원을 위해 모든 관계 데이터를 가져옵니다."""
     session = _get_session()
     try:
@@ -537,18 +572,20 @@ def get_all_relations() -> list[dict]:
             FROM relations r
             JOIN entities s ON r.subject_id = s.id
             JOIN entities o ON r.object_id = o.id
-        """))
+            JOIN articles a ON r.article_id = a.id
+            WHERE a.domain_key = :domain_key
+        """), {"domain_key": domain_key})
         return [dict(row._mapping) for row in result.fetchall()]
     finally:
         session.close()
 
 
-def get_latest_articles(limit: int = 50, min_importance: float = 0.0, today_only: bool = False, tag_filter: str = None, sort_by: str = "date") -> list[dict]:
+def get_latest_articles(limit: int = 50, min_importance: float = 0.0, today_only: bool = False, tag_filter: str = None, sort_by: str = "date", domain_key: str = "home_robot") -> list[dict]:
     """분석 완료된 최신 기사를 가져옵니다."""
     session = _get_session()
     try:
-        where_clauses = ["a.is_processed = TRUE", "a.importance >= :min_imp"]
-        params = {"limit": limit, "min_imp": min_importance}
+        where_clauses = ["a.is_processed = TRUE", "a.importance >= :min_imp", "a.domain_key = :domain_key"]
+        params = {"limit": limit, "min_imp": min_importance, "domain_key": domain_key}
 
         if today_only:
             where_clauses.append("a.collected_at >= NOW() - INTERVAL '24 hours'")
@@ -645,28 +682,28 @@ def init_news_sources():
     finally:
         session.close()
 
-def get_news_sources(active_only=False) -> list[dict]:
+def get_news_sources(active_only=False, domain_key: str = "home_robot") -> list[dict]:
     """등록된 뉴스 소스 목록을 가져옵니다."""
     session = _get_session()
     try:
-        query = "SELECT * FROM news_sources"
+        query = "SELECT * FROM news_sources WHERE domain_key = :domain_key"
         if active_only:
-            query += " WHERE is_active = TRUE"
+            query += " AND is_active = TRUE"
         query += " ORDER BY id ASC"
-        result = session.execute(text(query)).fetchall()
+        result = session.execute(text(query), {"domain_key": domain_key}).fetchall()
         return [dict(row._mapping) for row in result]
     finally:
         session.close()
 
-def add_news_source(name: str, url: str, label: str):
+def add_news_source(name: str, url: str, label: str, domain_key: str = "home_robot"):
     """새로운 뉴스 수집 소스를 추가합니다."""
     session = _get_session()
     try:
         session.execute(text("""
-            INSERT INTO news_sources (name, url, label)
-            VALUES (:name, :url, :label)
-            ON CONFLICT (name) DO UPDATE SET url = EXCLUDED.url, label = EXCLUDED.label
-        """), {"name": name, "url": url, "label": label})
+            INSERT INTO news_sources (domain_key, name, url, label)
+            VALUES (:domain_key, :name, :url, :label)
+            ON CONFLICT (name) DO UPDATE SET url = EXCLUDED.url, label = EXCLUDED.label, domain_key = EXCLUDED.domain_key
+        """), {"name": name, "url": url, "label": label, "domain_key": domain_key})
         session.commit()
     finally:
         session.close()
@@ -719,23 +756,23 @@ def clear_all_data(reset_sources=False):
         session.close()
 
 # ---- 유튜브 소스 CRUD --------------------------------------
-def get_youtube_sources() -> list[dict]:
+def get_youtube_sources(domain_key: str = "home_robot") -> list[dict]:
     session = _get_session()
     try:
-        result = session.execute(text("SELECT id, name, channel_url, label, is_active FROM youtube_sources ORDER BY id"))
+        result = session.execute(text("SELECT id, name, channel_url, label, is_active FROM youtube_sources WHERE domain_key = :domain_key ORDER BY id"), {"domain_key": domain_key})
         return [{"id": r[0], "name": r[1], "channel_url": r[2], "label": r[3], "is_active": r[4]} for r in result]
     finally:
         session.close()
 
-def add_youtube_source(name: str, channel_url: str, label: str):
+def add_youtube_source(name: str, channel_url: str, label: str, domain_key: str = "home_robot"):
     session = _get_session()
     try:
         session.execute(text("""
-            INSERT INTO youtube_sources (name, channel_url, label) 
-            VALUES (:n, :u, :l) 
-            ON CONFLICT(channel_url) DO UPDATE SET name = EXCLUDED.name, label = EXCLUDED.label
-            ON CONFLICT(name) DO UPDATE SET channel_url = EXCLUDED.channel_url, label = EXCLUDED.label
-        """), {"n": name, "u": channel_url, "l": label})
+            INSERT INTO youtube_sources (domain_key, name, channel_url, label) 
+            VALUES (:domain_key, :n, :u, :l) 
+            ON CONFLICT(channel_url) DO UPDATE SET name = EXCLUDED.name, label = EXCLUDED.label, domain_key = EXCLUDED.domain_key
+            ON CONFLICT(name) DO UPDATE SET channel_url = EXCLUDED.channel_url, label = EXCLUDED.label, domain_key = EXCLUDED.domain_key
+        """), {"n": name, "u": channel_url, "l": label, "domain_key": domain_key})
         session.commit()
     finally:
         session.close()
@@ -757,21 +794,21 @@ def delete_youtube_source(source_id: int):
         session.close()
 
 # ---- 추천 소스(Auto-Discovery) CRUD --------------------------
-def get_recommended_sources() -> list[dict]:
+def get_recommended_sources(domain_key: str = "home_robot") -> list[dict]:
     session = _get_session()
     try:
-        result = session.execute(text("SELECT id, url, source_type, label, reason, status FROM recommended_sources WHERE status='pending' ORDER BY id DESC"))
+        result = session.execute(text("SELECT id, url, source_type, label, reason, status FROM recommended_sources WHERE domain_key = :domain_key AND status='pending' ORDER BY id DESC"), {"domain_key": domain_key})
         return [{"id": r[0], "url": r[1], "source_type": r[2], "label": r[3], "reason": r[4], "status": r[5]} for r in result]
     finally:
         session.close()
 
-def add_recommended_source(url: str, source_type: str, label: str, reason: str):
+def add_recommended_source(url: str, source_type: str, label: str, reason: str, domain_key: str = "home_robot"):
     session = _get_session()
     try:
         session.execute(text("""
-            INSERT INTO recommended_sources (url, source_type, label, reason)
-            VALUES (:u, :t, :l, :r) ON CONFLICT(url) DO NOTHING
-        """), {"u": url, "t": source_type, "l": label, "r": reason})
+            INSERT INTO recommended_sources (domain_key, url, source_type, label, reason)
+            VALUES (:domain_key, :u, :t, :l, :r) ON CONFLICT(url) DO NOTHING
+        """), {"domain_key": domain_key, "u": url, "t": source_type, "l": label, "r": reason})
         session.commit()
     finally:
         session.close()
@@ -780,6 +817,59 @@ def update_recommended_source_status(req_id: int, status: str):
     session = _get_session()
     try:
         session.execute(text("UPDATE recommended_sources SET status = :s WHERE id = :id"), {"s": status, "id": req_id})
+        session.commit()
+    finally:
+        session.close()
+
+
+# ---- 도메인 CRUD API -----------------------------------------
+def get_domains() -> list[dict]:
+    """등록된 모든 도메인 목록을 가져옵니다."""
+    session = _get_session()
+    try:
+        result = session.execute(text("SELECT key, name, keywords, system_prompt, created_at FROM domains ORDER BY created_at ASC"))
+        return [{"key": r[0], "name": r[1], "keywords": r[2] or [], "system_prompt": r[3], "created_at": r[4]} for r in result.fetchall()]
+    finally:
+        session.close()
+
+
+def get_domain(key: str) -> Optional[dict]:
+    """특정 도메인의 정보를 가져옵니다."""
+    session = _get_session()
+    try:
+        result = session.execute(text("SELECT key, name, keywords, system_prompt, created_at FROM domains WHERE key = :key"), {"key": key}).fetchone()
+        if result:
+            return {"key": result[0], "name": result[1], "keywords": result[2] or [], "system_prompt": result[3], "created_at": result[4]}
+        return None
+    finally:
+        session.close()
+
+
+def add_domain(key: str, name: str, keywords: list[str], system_prompt: str = None):
+    """새로운 도메인을 추가합니다."""
+    session = _get_session()
+    try:
+        session.execute(text("""
+            INSERT INTO domains (key, name, keywords, system_prompt)
+            VALUES (:key, :name, :keywords, :system_prompt)
+            ON CONFLICT (key) DO UPDATE 
+            SET name = EXCLUDED.name, keywords = EXCLUDED.keywords, system_prompt = EXCLUDED.system_prompt
+        """), {"key": key.strip(), "name": name.strip(), "keywords": keywords, "system_prompt": system_prompt})
+        session.commit()
+    finally:
+        session.close()
+
+
+def delete_domain(key: str):
+    """도메인을 삭제합니다. 연쇄 삭제 처리를 함께 진행합니다."""
+    session = _get_session()
+    try:
+        session.execute(text("DELETE FROM news_sources WHERE domain_key = :key"), {"key": key})
+        session.execute(text("DELETE FROM youtube_sources WHERE domain_key = :key"), {"key": key})
+        session.execute(text("DELETE FROM recommended_sources WHERE domain_key = :key"), {"key": key})
+        session.execute(text("DELETE FROM pipeline_logs WHERE domain_key = :key"), {"key": key})
+        session.execute(text("DELETE FROM articles WHERE domain_key = :key"), {"key": key})
+        session.execute(text("DELETE FROM domains WHERE key = :key"), {"key": key})
         session.commit()
     finally:
         session.close()

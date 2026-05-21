@@ -25,7 +25,7 @@ def render_tab_briefing(stats, articles):
     if search_query:
         from db.vector_store import semantic_search
         with st.spinner(f"'{search_query}' 관련 기사 찾는 중..."):
-            search_results = semantic_search(search_query, top_k=20)
+            search_results = semantic_search(search_query, top_k=20, domain_key=st.session_state.selected_domain_key)
             if search_results:
                 articles = search_results # 기존 리스트를 검색 결과로 교체
                 sc1, sc2 = st.columns([8.5, 1.5], vertical_alignment="center")

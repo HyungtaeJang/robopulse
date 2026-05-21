@@ -17,25 +17,33 @@ warnings.filterwarnings("ignore", message="This package .* has been renamed to d
 
 from duckduckgo_search import DDGS
 from engine.graph_builder import get_entity_stats
-from db.vector_store import get_lms_client, add_recommended_source, get_active_model_name
+from db.vector_store import get_lms_client, add_recommended_source, get_active_model_name, get_domain
 
 logger = logging.getLogger(__name__)
 
-def discover_sources():
+def discover_sources(domain_key: str = "home_robot"):
     """
     지식 그래프에서 부상하는 엔티티를 추출해 웹을 탐색하고,
     양질의 신규 소스를 발굴하여 추천 DB에 적재합니다.
     """
-    logger.info("🔍 [AI 자율 탐색] 신규 데이터 소스 발굴 시작...")
+    logger.info(f"🔍 [AI 자율 탐색] 신규 데이터 소스 발굴 시작... (도메인: {domain_key})")
     start_time = datetime.now()
 
     # 1. 대상 키워드 추출 (가중치 부여)
-    stats = get_entity_stats()
+    stats = get_entity_stats(domain_key=domain_key)
     target_entities = [e["name"] for e in stats if e["type"] in ("company", "technology")][:3]
     
+    dom_info = get_domain(domain_key)
+    dom_name = "로봇"
+    if dom_info:
+        dom_name = dom_info["name"]
+        
     if not target_entities:
-        logger.info("탐색할 주요 엔티티가 충분하지 않습니다. 홈로봇 핵심 타겟 사용.")
-        target_entities = ["Figure AI", "Tesla Optimus", "Unitree Robotics", "1X Technologies", "Apptronik"]
+        logger.info(f"탐색할 주요 엔티티가 충분하지 않습니다. {dom_name} 핵심 타겟 사용.")
+        if dom_info and dom_info.get("keywords"):
+            target_entities = dom_info["keywords"][:5]
+        else:
+            target_entities = ["Figure AI", "Tesla Optimus", "Unitree Robotics", "1X Technologies", "Apptronik"]
 
     logger.info(f"선정된 탐색 타겟: {target_entities}")
 
@@ -43,9 +51,9 @@ def discover_sources():
     client = get_lms_client()
 
     for entity in target_entities:
-        # 홈로봇/휴머노이드 전문성을 위한 쿼리 파라미터 강화
-        rss_query = f"{entity} humanoid home robotics official news rss OR blog"
-        yt_query = f"{entity} humanoid official youtube channel robotics domestic"
+        # 도메인별 한글명 및 키워드를 반영한 쿼리 고도화
+        rss_query = f"{entity} {dom_name} official news rss OR blog"
+        yt_query = f"{entity} {dom_name} official youtube channel"
 
         for query, search_type in [(rss_query, "news"), (yt_query, "youtube")]:
             try:
@@ -74,7 +82,7 @@ def discover_sources():
                 # 3. Gemma 4에게 검증 및 추출 요청
                 prompt = f"""
 다음은 '{entity}'에 대해 '{query}'로 검색한 웹 결과입니다.
-이 중 로봇 산업 모니터링을 위해 수집할 가치가 있는 '공식 블로그/RSS' 또는 '공식 유튜브 채널'의 URL이 있다면 하나만 추출하세요.
+이 중 '{dom_name}' 관련 모니터링을 위해 수집할 가치가 있는 '공식 블로그/RSS' 또는 '공식 유튜브 채널'의 URL이 있다면 하나만 추출하세요.
 없거나 쓸모없는 정보라면 빈 문자열을 반환하세요.
 
 검색 결과:
@@ -111,7 +119,8 @@ def discover_sources():
                         url=url,
                         source_type=data.get("source_type", "news"),
                         label=data.get("label", entity),
-                        reason=data.get("reason", "웹 자율 탐색 결과")
+                        reason=data.get("reason", "웹 자율 탐색 결과"),
+                        domain_key=domain_key
                     )
                     new_recommendations_count += 1
                     logger.info(f"💡 신규 소스 발굴: [{data.get('label')}] {url}")

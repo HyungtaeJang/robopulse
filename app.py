@@ -54,7 +54,7 @@ def analysis_callback(current, total):
             mgr["active"] = False
             mgr["done"] = True
 
-def run_analysis_in_background():
+def run_analysis_in_background(domain_key: str = "home_robot"):
     """AI 분석을 백그라운드 스레드에서 시작 (전역 상태 사용)"""
     mgr = globals()["ANALYSIS_MANAGER"]
     with mgr["lock"]:
@@ -64,7 +64,7 @@ def run_analysis_in_background():
         mgr["done"] = False
     
     # 분석 스레드 생성 (인자만 전달, 컨텍스트 주입 불필요)
-    thread = threading.Thread(target=job_analyze_unprocessed, args=(analysis_callback, LMS_MODEL_NAME))
+    thread = threading.Thread(target=job_analyze_unprocessed, args=(analysis_callback, LMS_MODEL_NAME, domain_key))
     thread.daemon = True # 프로세스 종료 시 함께 종료
     thread.start()
 
@@ -75,7 +75,8 @@ try:
         init_news_sources, get_news_sources, add_news_source, toggle_news_source, delete_news_source,
         get_youtube_sources, add_youtube_source, toggle_youtube_source, delete_youtube_source,
         get_recommended_sources, update_recommended_source_status,
-        get_lms_client, semantic_search, get_available_lms_models
+        get_lms_client, semantic_search, get_available_lms_models,
+        get_domains, get_domain
     )
     from scheduler.pipeline_scheduler import (
         start_scheduler, get_scheduler_status, job_fetch_news, job_fetch_videos, 
@@ -144,6 +145,11 @@ LMS_MODEL_NAME = sync_lms_model(conn_status)
 auto_start_scheduler(is_live)
 
 # ---- 세션 스테이트 초기화 및 분석 알림 --------------------------
+if "selected_domain_key" not in st.session_state:
+    st.session_state.selected_domain_key = "home_robot"
+if "active_domain_key" not in st.session_state:
+    st.session_state.active_domain_key = None
+
 if "briefing_limit" not in st.session_state:
     st.session_state.briefing_limit = 50
 if "briefing_filter_tag" not in st.session_state:
@@ -209,21 +215,25 @@ if is_live and "db_initialized" not in st.session_state:
     init_news_sources()
     st.session_state.db_initialized = True
 
-# 그래프 복원
-if is_live and "graph_initialized" not in st.session_state:
-    relations = get_all_relations()
-    rebuild_from_db(relations)
-    st.session_state.graph_initialized = True
+# 그래프 복원 및 도메인 동적 리빌드
+if is_live:
+    # 도메인이 변경되었거나 그래프가 초기화되지 않은 경우 해당 도메인의 관계 데이터로 그래프 리빌드
+    if "graph_initialized" not in st.session_state or st.session_state.active_domain_key != st.session_state.selected_domain_key:
+        relations = get_all_relations(domain_key=st.session_state.selected_domain_key)
+        rebuild_from_db(relations, domain_key=st.session_state.selected_domain_key)
+        st.session_state.graph_initialized = True
+        st.session_state.active_domain_key = st.session_state.selected_domain_key
 
 if is_live:
-    stats = get_pipeline_stats()
+    stats = get_pipeline_stats(domain_key=st.session_state.selected_domain_key)
     # 파라미터 기반 기사 로드
     articles = get_latest_articles(
         limit=st.session_state.briefing_limit, 
         min_importance=st.session_state.briefing_min_importance, 
         today_only=st.session_state.briefing_today_only,
         tag_filter=st.session_state.briefing_filter_tag,
-        sort_by=st.session_state.briefing_sort_by
+        sort_by=st.session_state.briefing_sort_by,
+        domain_key=st.session_state.selected_domain_key
     )
     scheduler_jobs = get_scheduler_status()
 else:
@@ -246,10 +256,16 @@ render_sidebar(
 )
 
 # ---- 메인 헤더 ----------------------------------------------
+domain_name = "홈로봇"
+if is_live:
+    dom_info = get_domain(st.session_state.selected_domain_key)
+    if dom_info:
+        domain_name = dom_info["name"]
+
 col_h1, col_h2 = st.columns([8, 2])
 with col_h1:
     st.markdown('<h1 class="hero-title">RoboPulse</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="hero-sub">홈로봇 관련 데이터 수집 자동화 엔진 — Powered by Local Gemma 4</p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="hero-sub">{domain_name} 관련 데이터 수집 자동화 엔진 — Powered by Local Gemma 4</p>', unsafe_allow_html=True)
 with col_h2:
     st.markdown(f"<div style='text-align:right;color:#94a3b8;font-size:0.8rem;padding-top:14px'>{datetime.now().strftime('%m/%d %H:%M')}</div>", unsafe_allow_html=True)
 

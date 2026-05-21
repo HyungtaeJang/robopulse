@@ -25,19 +25,19 @@ ANALYSIS_CRON_HOUR = int(os.getenv("ANALYSIS_CRON_HOUR", "4"))
 
 # ---- 실시간 분석 동시성 제어 변수 및 락 ----------------------
 _analysis_lock = threading.Lock()
-_has_pending_analysis = False
+_pending_analyses = set()  # 분석 대기 중인 domain_key 세트
 
 
-def _run_background_analysis():
+def _run_background_analysis(domain_key: str = "home_robot"):
     """실시간 수집된 뉴스를 백그라운드 스레드에서 안전하게 분석합니다. (더티 플래그 패턴 적용)"""
-    global _has_pending_analysis
+    global _pending_analyses
     import sys
 
     # 1. 락 획득 시도 (Non-blocking)
     if not _analysis_lock.acquire(blocking=False):
         # 이미 다른 스레드가 실행 중이면 예약 플래그만 활성화하고 즉시 리턴
-        _has_pending_analysis = True
-        logger.info("🤖 [실시간 AI 분석] 이미 분석 스레드가 실행 중입니다. 대기열(Dirty Flag) 예약을 활성화하고 종료합니다.")
+        _pending_analyses.add(domain_key)
+        logger.info(f"🤖 [실시간 AI 분석] 이미 분석 스레드가 실행 중입니다. 도메인 '{domain_key}' 대기열 예약을 활성화하고 종료합니다.")
         return
 
     try:
@@ -59,10 +59,12 @@ def _run_background_analysis():
                         mgr["active"] = False
                         mgr["done"] = True
 
-        # 연속 쿼리 연장 루프 (더티 플래그 체크)
+        current_domain = domain_key
+        # 연속 쿼리 연장 루프
         while True:
-            # 먼저 누적되어 대기 중이던 플래그를 클리어
-            _has_pending_analysis = False
+            # 먼저 해당 도메인의 플래그를 클리어
+            if current_domain in _pending_analyses:
+                _pending_analyses.remove(current_domain)
 
             if mgr:
                 with mgr["lock"]:
@@ -72,14 +74,16 @@ def _run_background_analysis():
                     mgr["total"] = 0
                     mgr["done"] = False
 
-            logger.info("🤖 [실시간 AI 분석] 실시간 분석 작업을 시작합니다.")
-            job_analyze_unprocessed(progress_callback=cb if mgr else None)
+            logger.info(f"🤖 [실시간 AI 분석] 도메인 '{current_domain}'의 실시간 분석 작업을 시작합니다.")
+            job_analyze_unprocessed(domain_key=current_domain, progress_callback=cb if mgr else None)
 
             # 분석 루프가 끝난 후, 그사이에 신규 추가/수집 요청이 들어왔는지 확인
-            if not _has_pending_analysis:
+            if not _pending_analyses:
                 break
             
-            logger.info("🔄 [실시간 AI 분석] 분석 도중 추가로 수집된 뉴스가 존재합니다. 연속 처리를 위해 분석 루프를 연장합니다.")
+            # 대기 중인 도메인 중 하나를 꺼내서 계속 진행
+            current_domain = _pending_analyses.pop()
+            logger.info(f"🔄 [실시간 AI 분석] 분석 도중 추가로 예약된 도메인 '{current_domain}' 처리를 시작합니다.")
 
     except Exception as e:
         logger.error(f"❌ [실시간 AI 분석] 실행 중 에러 발생: {e}")
@@ -93,45 +97,57 @@ def _run_background_analysis():
 
 # ---- 파이프라인 작업 함수들 ---------------------------------
 
-def job_fetch_news():
-    """뉴스 RSS 전체 수집 후 DB 저장까지만 수행하는 가벼운 파이프라인"""
+def job_fetch_news(domain_key: str = None):
+    """뉴스 RSS 전체 또는 특정 도메인 수집 후 DB 저장까지만 수행하는 가벼운 파이프라인"""
     from ingestion.news_scraper import run_all_sources
+    from db.vector_store import get_domains
     
-    logger.info("📰 [뉴스 파이프라인] 시작")
+    logger.info(f"📰 [뉴스 파이프라인] 수집 시작 (도메인: {domain_key or '전체'})")
     start = datetime.now()
 
     try:
-        # Step 1: 수집 (분석은 심야 배치로 이관)
-        result = run_all_sources()
-        logger.info(f"수집 완료: {result}")
-
-        elapsed = (datetime.now() - start).total_seconds()
-        _log_pipeline(source="news", status="success",
-                      fetched=result["fetched"], skipped=result["skipped"], saved=result["saved"])
-        logger.info(f"✅ [뉴스 파이프라인] 완료 ({elapsed:.1f}초)")
-
-        # Step 2: 실시간 분석 트리거 (새로 저장된 기사가 존재하는 경우 즉시 시작)
-        if result.get("saved", 0) > 0:
-            logger.info(f"🆕 새로 저장된 뉴스가 {result['saved']}건 있습니다. 실시간 백그라운드 LLM 분석을 트리거합니다.")
-            t = threading.Thread(target=_run_background_analysis, name="LiveAnalysisThread")
-            t.daemon = True
-            t.start()
-
+        if domain_key:
+            target_domains = [{"key": domain_key}]
+        else:
+            target_domains = get_domains()
     except Exception as e:
-        _log_pipeline(source="news", status="failure", error_msg=str(e))
-        logger.error(f"❌ [뉴스 파이프라인] 오류: {e}")
-        raise
+        logger.error(f"❌ [뉴스 파이프라인] 도메인 목록 조회 실패: {e}")
+        return
 
-def job_analyze_unprocessed(progress_callback=None, model_name=None):
-    """뉴스 수집 없이 DB에 저장된 미처리 기사들만 골라 LLM 분석을 수행합니다."""
+    for dom in target_domains:
+        domain_key_item = dom["key"]
+        try:
+            logger.info(f"📰 [뉴스 파이프라인] 도메인 '{domain_key_item}' 수집 시작")
+            result = run_all_sources(domain_key=domain_key_item)
+            logger.info(f"도메인 '{domain_key_item}' 수집 완료: {result}")
+
+            _log_pipeline(source="news", status="success", domain_key=domain_key_item,
+                          fetched=result["fetched"], skipped=result["skipped"], saved=result["saved"])
+
+            # Step 2: 실시간 분석 트리거 (새로 저장된 기사가 존재하는 경우 즉시 시작)
+            if result.get("saved", 0) > 0:
+                logger.info(f"🆕 도메인 '{domain_key_item}'에 새로 저장된 뉴스가 {result['saved']}건 있습니다. 실시간 백그라운드 LLM 분석을 트리거합니다.")
+                t = threading.Thread(target=_run_background_analysis, args=(domain_key_item,), name=f"LiveAnalysisThread_{domain_key_item}")
+                t.daemon = True
+                t.start()
+        except Exception as e:
+            _log_pipeline(source="news", status="failure", domain_key=domain_key_item, error_msg=str(e))
+            logger.error(f"❌ [뉴스 파이프라인] 도메인 '{domain_key_item}' 오류: {e}")
+
+    elapsed = (datetime.now() - start).total_seconds()
+    logger.info(f"✅ [뉴스 파이프라인] 수집 완료 ({elapsed:.1f}초)")
+
+
+def job_analyze_unprocessed(progress_callback=None, model_name=None, domain_key: str = None):
+    """뉴스 수집 없이 DB에 저장된 미처리 기사들만 골라 LLM 분석을 수행합니다. domain_key가 None이면 모든 도메인 처리."""
     from engine.gemma_worker import analyze_article
     from engine.graph_builder import add_analysis_to_graph
     from db.vector_store import (
         get_unprocessed_articles, save_analysis_result, 
-        get_system_setting, get_available_lms_models
+        get_system_setting, get_available_lms_models, get_domains
     )
     
-    logger.info("🤖 [미처리 데이터 분석] 시작")
+    logger.info(f"🤖 [미처리 데이터 분석] 시작 (도메인: {domain_key or '전체'})")
     start = datetime.now()
     
     try:
@@ -141,10 +157,7 @@ def job_analyze_unprocessed(progress_callback=None, model_name=None):
         
         # 모델 자동 감지 로직 (scheduler 호출 시 대비)
         if not model_name:
-            # 1순위: DB에 저장된 활성 모델 (app.py에서 동기화됨)
             model_name = get_system_setting("active_lms_model")
-            
-            # 2순위: DB에 없으면 서버 로드 모델 중 첫 번째
             if not model_name:
                 try:
                     models = get_available_lms_models()
@@ -154,89 +167,114 @@ def job_analyze_unprocessed(progress_callback=None, model_name=None):
                 except:
                     pass
 
-        unprocessed = get_unprocessed_articles(limit=limit)
-        if not unprocessed:
-            logger.info("분석할 미처리 기사가 없습니다.")
-            if progress_callback:
-                progress_callback(0, 0)
-            return
-
-        total = len(unprocessed)
-        logger.info(f"LLM 분석 대상: {total}건 (모델: {model_name or 'Default'})")
-        
-        success_count = 0
-        error_count = 0
-        for i, article in enumerate(unprocessed, 1):
+        # 처리할 도메인 목록 구하기
+        if domain_key:
+            target_keys = [domain_key]
+        else:
             try:
-                analysis = analyze_article(
-                    title=article["title"],
-                    content=article["content"],
-                    source=article["source"],
-                    model_name=model_name,
-                )
-                if analysis:
-                    save_analysis_result(article["id"], analysis)
-                    add_analysis_to_graph(
-                        article_id=article["id"],
-                        entities=[e.model_dump() for e in analysis.entities],
-                        relations=[r.model_dump() for r in analysis.relations],
-                    )
-                    success_count += 1
-                else:
-                    error_count += 1
-            except RuntimeError as re:
-                if "FATAL_LLM_ERROR" in str(re):
-                    logger.error(f"🛑 [치명적 오류] 분석을 중단합니다: {re}")
-                    _log_pipeline(source="analysis", status="failure", error_msg=f"치명적 오류로 중단: {re}")
-                    if progress_callback: progress_callback(-1, 0)
-                    return # 즉시 종료
+                target_keys = [dom["key"] for dom in get_domains()]
+            except Exception as e:
+                logger.error(f"도메인 목록 조회 실패: {e}")
+                return
 
-            # 콜백을 통해 실시간 진행률 보고 (현재 수, 전체 수)
-            if progress_callback:
-                progress_callback(i, total)
+        for key in target_keys:
+            logger.info(f"🤖 [미처리 데이터 분석] 도메인 '{key}' 처리 시작")
+            unprocessed = get_unprocessed_articles(limit=limit, domain_key=key)
+            if not unprocessed:
+                logger.info(f"도메인 '{key}'에 분석할 미처리 기사가 없습니다.")
+                continue
+
+            total = len(unprocessed)
+            logger.info(f"LLM 분석 대상(도메인: {key}): {total}건 (모델: {model_name or 'Default'})")
+            
+            success_count = 0
+            error_count = 0
+            for i, article in enumerate(unprocessed, 1):
+                try:
+                    analysis = analyze_article(
+                        title=article["title"],
+                        content=article["content"],
+                        source=article["source"],
+                        domain_key=key,
+                        model_name=model_name,
+                    )
+                    if analysis:
+                        save_analysis_result(article["id"], analysis)
+                        add_analysis_to_graph(
+                            article_id=article["id"],
+                            entities=[e.model_dump() for e in analysis.entities],
+                            relations=[r.model_dump() for r in analysis.relations],
+                            domain_key=key,
+                        )
+                        success_count += 1
+                    else:
+                        error_count += 1
+                except RuntimeError as re:
+                    if "FATAL_LLM_ERROR" in str(re):
+                        logger.error(f"🛑 [치명적 오류] 분석을 중단합니다: {re}")
+                        _log_pipeline(source="analysis", status="failure", domain_key=key, error_msg=f"치명적 오류로 중단: {re}")
+                        if progress_callback: progress_callback(-1, 0)
+                        return # 즉시 종료
+
+                # 콜백을 통해 실시간 진행률 보고 (현재 수, 전체 수)
+                if progress_callback:
+                    progress_callback(i, total)
+            
+            # 파이프라인 로그 기록
+            _log_pipeline(
+                source="analysis", 
+                status="success", 
+                domain_key=key,
+                fetched=total, 
+                saved=success_count,
+                skipped=total - success_count
+            )
         
         elapsed = (datetime.now() - start).total_seconds()
-        logger.info(f"✅ [분석 완료] {success_count}/{total}건 처리됨 ({elapsed:.1f}초)")
-        
-        # 파이프라인 로그 기록
-        _log_pipeline(
-            source="analysis", 
-            status="success", 
-            fetched=total, 
-            saved=success_count,
-            skipped=total - success_count
-        )
+        logger.info(f"✅ [분석 완료] 전체 미처리 기사 분석 종료 ({elapsed:.1f}초)")
         
     except Exception as e:
         logger.error(f"❌ [분석 오류] {e}")
-        _log_pipeline(source="analysis", status="failure", error_msg=str(e))
+        _log_pipeline(source="analysis", status="failure", domain_key=domain_key or "unknown", error_msg=str(e))
         if progress_callback:
             progress_callback(-1, 0) # 오류 발생 신호
 
 
-def job_fetch_videos():
-    """유튜브 채널 자막 수집 후 DB 저장까지만 수행하는 파이프라인"""
+def job_fetch_videos(domain_key: str = None):
+    """유튜브 채널 자막 수집 후 DB 저장까지만 수행하는 파이프라인 (모든 또는 특정 도메인 대상)"""
     from ingestion.video_processor import run_all_channels
+    from db.vector_store import get_domains
 
-    logger.info("🎬 [영상 파이프라인] 시작")
+    logger.info(f"🎬 [영상 파이프라인] 수집 시작 (도메인: {domain_key or '전체'})")
     start = datetime.now()
 
     try:
-        result = run_all_channels()
-        logger.info(f"수집 완료: {result}")
-
-        elapsed = (datetime.now() - start).total_seconds()
-        _log_pipeline(source="youtube", status="success",
-                      fetched=result["fetched"], skipped=result["skipped"], saved=result["saved"])
-        logger.info(f"✅ [영상 파이프라인] 완료 ({elapsed:.1f}초)")
-
+        if domain_key:
+            target_domains = [{"key": domain_key}]
+        else:
+            target_domains = get_domains()
     except Exception as e:
-        _log_pipeline(source="youtube", status="failure", error_msg=str(e))
-        logger.error(f"❌ [영상 파이프라인] 오류: {e}")
-        raise
+        logger.error(f"❌ [영상 파이프라인] 도메인 목록 조회 실패: {e}")
+        return
+
+    for dom in target_domains:
+        domain_key_item = dom["key"]
+        try:
+            logger.info(f"🎬 [영상 파이프라인] 도메인 '{domain_key_item}' 수집 시작")
+            result = run_all_channels(domain_key=domain_key_item)
+            logger.info(f"도메인 '{domain_key_item}' 수집 완료: {result}")
+
+            _log_pipeline(source="youtube", status="success", domain_key=domain_key_item,
+                          fetched=result["fetched"], skipped=result["skipped"], saved=result["saved"])
+        except Exception as e:
+            _log_pipeline(source="youtube", status="failure", domain_key=domain_key_item, error_msg=str(e))
+            logger.error(f"❌ [영상 파이프라인] 도메인 '{domain_key_item}' 오류: {e}")
+
+    elapsed = (datetime.now() - start).total_seconds()
+    logger.info(f"✅ [영상 파이프라인] 수집 완료 ({elapsed:.1f}초)")
 
 
-def _log_pipeline(source: str, status: str,
+def _log_pipeline(source: str, status: str, domain_key: str = "home_robot",
                   fetched: int = 0, skipped: int = 0, saved: int = 0,
                   error_msg: str = None):
     """파이프라인 실행 결과를 pipeline_logs 테이블에 기록합니다."""
@@ -245,10 +283,11 @@ def _log_pipeline(source: str, status: str,
         import uuid
         session = _get_session()
         session.execute(text("""
-            INSERT INTO pipeline_logs (id, source, status, fetched, skipped, saved, error_msg)
-            VALUES (:id, :source, :status, :fetched, :skipped, :saved, :error_msg)
+            INSERT INTO pipeline_logs (id, domain_key, source, status, fetched, skipped, saved, error_msg)
+            VALUES (:id, :domain_key, :source, :status, :fetched, :skipped, :saved, :error_msg)
         """), {
             "id": str(uuid.uuid4()),
+            "domain_key": domain_key,
             "source": source, "status": status,
             "fetched": fetched, "skipped": skipped, "saved": saved,
             "error_msg": error_msg,

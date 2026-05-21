@@ -1,4 +1,4 @@
-다음 홈로봇 관련 기사를 분석하여 지정된 JSON 형식으로 응답하세요.
+다음 {{ domain_name }} 관련 기사를 분석하여 지정된 JSON 형식으로 응답하세요.
 
 ## 분석 대상 기사
 제목: {{ title }}
@@ -33,7 +33,7 @@
 
 중요 규칙:
 - key_points는 반드시 1~2개의 핵심 문장만 배열로 출력할 것 (절대 3개 이상 출력 금지, JSON 스키마 엄수)
-- importance_score는 0.0~10.0 사이의 숫자 (홈로봇 산업에 미치는 영향 기준)
+- importance_score는 0.0~10.0 사이의 숫자 ({{ domain_name }} 산업에 미치는 영향 기준)
 - relations의 predicate는 한국어 동사로 (예: "개발", "인수", "탑재", "협력", "발표", "투자")
 - tags는 기술 키워드 위주로 최대 10개
-- 홈로봇과 무관한 내용이면 importance_score를 1.0 이하로 설정
+- {{ domain_name }}과 무관한 내용이면 importance_score를 1.0 이하로 설정

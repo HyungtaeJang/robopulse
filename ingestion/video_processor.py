@@ -94,7 +94,7 @@ def _download_subtitle(video_id: str) -> Optional[str]:
             return None
 
 
-def fetch_channel(channel: dict) -> tuple[int, int, int]:
+def fetch_channel(channel: dict, domain_key: str = "home_robot") -> tuple[int, int, int]:
     """
     단일 유튜브 채널을 처리합니다.
     Returns: (fetched, skipped, saved)
@@ -138,6 +138,7 @@ def fetch_channel(channel: dict) -> tuple[int, int, int]:
         article = RawArticle(
             url=url,
             source=channel["name"],
+            domain_key=domain_key,
             source_type="video",
             title=video.get("title", ""),
             content=subtitle,
@@ -152,17 +153,17 @@ def fetch_channel(channel: dict) -> tuple[int, int, int]:
     return fetched, skipped, saved
 
 
-def run_all_channels() -> dict:
-    """모든 유튜브 채널을 순차적으로 수집합니다."""
+def run_all_channels(domain_key: str = "home_robot") -> dict:
+    """특정 도메인의 모든 유튜브 채널을 순차적으로 수집합니다."""
     from db.vector_store import get_youtube_sources
     
     total = {"fetched": 0, "skipped": 0, "saved": 0}
     
-    active_channels = [ch for ch in get_youtube_sources() if ch["is_active"]]
+    active_channels = [ch for ch in get_youtube_sources(domain_key=domain_key) if ch["is_active"]]
 
     for channel in active_channels:
-        logger.info(f"채널 수집 시작: {channel['label']}")
-        f, sk, sv = fetch_channel(channel)
+        logger.info(f"[{domain_key}] 채널 수집 시작: {channel['label']}")
+        f, sk, sv = fetch_channel(channel, domain_key=domain_key)
         total["fetched"] += f
         total["skipped"] += sk
         total["saved"] += sv

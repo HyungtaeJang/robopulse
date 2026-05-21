@@ -4,18 +4,77 @@ from db.vector_store import (
     get_news_sources, add_news_source, toggle_news_source, delete_news_source,
     get_youtube_sources, add_youtube_source, toggle_youtube_source, delete_youtube_source,
     get_recommended_sources, update_recommended_source_status, clear_all_data,
-    get_available_lms_models, get_system_setting, set_system_setting
+    get_available_lms_models, get_system_setting, set_system_setting,
+    get_domains, add_domain, delete_domain
 )
 from scheduler.pipeline_scheduler import update_analysis_schedule
 from engine.source_explorer import discover_sources
 
 def render_tab_settings(is_live):
-    sub_tab_sources, sub_tab_system = st.tabs(["수집 소스 관리", "시스템 제어"])
+    sub_tab_domains, sub_tab_sources, sub_tab_system = st.tabs(["도메인 설정 및 관리", "수집 소스 관리", "시스템 제어"])
     
+    # --- 서브 탭 0: 도메인 설정 및 관리 ---
+    with sub_tab_domains:
+        st.markdown("#### 🌐 도메인 설정 및 관리")
+        st.caption("새로운 분석 도메인(예: 전기자동차, 자율주행 등)을 추가하거나 기존 도메인을 삭제할 수 있습니다.")
+        
+        # 신규 도메인 추가 양식
+        with st.expander("➕ 신규 도메인 추가", expanded=False):
+            with st.form("add_domain_form"):
+                new_dom_key = st.text_input("도메인 고유 영문 키", placeholder="예: ev")
+                new_dom_name = st.text_input("도메인 한글 이름", placeholder="예: 전기자동차")
+                new_dom_keywords_str = st.text_input("수집 관심 키워드 (쉼표로 구분)", placeholder="예: electric vehicle, ev, tesla, ionic")
+                new_dom_prompt = st.text_area("커스텀 AI 시스템 프롬프트 (생략 시 기본 템플릿 사용)", placeholder="이 도메인의 기사를 분석하거나 AI Chat 시 유도할 전용 지침을 적어주세요.")
+                
+                dom_submitted = st.form_submit_button("추가하기")
+                if dom_submitted:
+                    if not new_dom_key or not new_dom_name:
+                        st.warning("영문 키와 한글 이름을 모두 입력해주세요.")
+                    elif not new_dom_key.strip().isalnum():
+                        st.warning("영문 키는 숫자와 알파벳으로만 구성되어야 합니다.")
+                    else:
+                        keywords = [k.strip() for k in new_dom_keywords_str.split(",") if k.strip()]
+                        if not keywords:
+                            keywords = [new_dom_name]
+                        
+                        add_domain(new_dom_key.strip().lower(), new_dom_name.strip(), keywords, new_dom_prompt.strip() if new_dom_prompt else None)
+                        st.toast(f"✅ '{new_dom_name}' 도메인이 추가되었습니다.")
+                        st.session_state.selected_domain_key = new_dom_key.strip().lower()
+                        st.rerun()
+                        
+        # 등록된 도메인 목록 표시
+        st.markdown("##### 📋 등록된 도메인 목록")
+        domains = get_domains() if is_live else [{"key": "home_robot", "name": "홈로봇", "keywords": ["home robot"]}]
+        for dom in domains:
+            d_col1, d_col2 = st.columns([8, 2])
+            with d_col1:
+                kw_str = ", ".join(dom["keywords"])
+                st.markdown(f"**{dom['name']}** (`{dom['key']}`)<br><span style='font-size:0.75rem;color:#64748b;'>키워드: {kw_str}</span>", unsafe_allow_html=True)
+                if dom.get("system_prompt"):
+                    st.markdown("<span style='font-size:0.75rem;color:#1e3a8a;background-color:#eff6ff;padding:2px 6px;border-radius:4px;'>커스텀 시스템 프롬프트 있음</span>", unsafe_allow_html=True)
+            with d_col2:
+                if dom["key"] == "home_robot":
+                    st.button("삭제", key=f"del_dom_{dom['key']}", disabled=True, help="기본 도메인은 삭제할 수 없습니다.")
+                else:
+                    if st.button("삭제", key=f"del_dom_{dom['key']}", type="secondary"):
+                        delete_domain(dom["key"])
+                        st.toast(f"🗑️ '{dom['name']}' 도메인 및 수집 소스, 기사 데이터가 연쇄 삭제되었습니다.")
+                        if st.session_state.selected_domain_key == dom["key"]:
+                            st.session_state.selected_domain_key = "home_robot"
+                        st.rerun()
+            st.markdown("---")
+            
     # --- 서브 탭 1: 수집 소스 관리 ---
     with sub_tab_sources:
-        st.markdown("#### 데이터 수집 루트 (RSS)")
-        st.caption("시스템이 정기적으로 방문하여 로봇 뉴스를 수집할 사이트 목록입니다.")
+        selected_domain_key = st.session_state.selected_domain_key
+        dom_name = "현재"
+        if is_live:
+            dom_info = next((d for d in domains if d["key"] == selected_domain_key), None)
+            if dom_info:
+                dom_name = dom_info["name"]
+                
+        st.markdown(f"#### 🌐 [ {dom_name} ] 도메인 수집 소스 관리")
+        st.caption(f"선택한 '{dom_name}' 도메인에 대한 뉴스 RSS 및 유튜브 채널을 관리합니다.")
         
         with st.expander("➕ 신규 수집 소스 추가", expanded=False):
             with st.form("add_source_form"):
@@ -29,16 +88,18 @@ def render_tab_settings(is_live):
                     else:
                         new_name = "".join(filter(str.isalnum, new_label.lower())).replace(" ", "_")
                         if "youtube" in source_type:
-                            add_youtube_source("youtube_" + new_name, new_url, new_label)
+                            add_youtube_source("youtube_" + new_name, new_url, new_label, domain_key=selected_domain_key)
                         else:
-                            add_news_source(new_name, new_url, new_label)
+                            add_news_source(new_name, new_url, new_label, domain_key=selected_domain_key)
                         st.toast(f"{new_label} 추가 완료!")
                         st.rerun()
-
+ 
         col_ns, col_ys = st.columns(2)
         with col_ns:
             st.markdown("##### 📰 뉴스 소스 목록")
-            sources = get_news_sources() if is_live else []
+            sources = get_news_sources(domain_key=selected_domain_key) if is_live else []
+            if not sources:
+                st.info("등록된 뉴스 소스가 없습니다.")
             for src in sources:
                 c1, c2, c3 = st.columns([6, 2, 2])
                 with c1:
@@ -58,7 +119,9 @@ def render_tab_settings(is_live):
         
         with col_ys:
             st.markdown("##### 📺 유튜브 채널 목록")
-            yt_sources = get_youtube_sources() if is_live else []
+            yt_sources = get_youtube_sources(domain_key=selected_domain_key) if is_live else []
+            if not yt_sources:
+                st.info("등록된 유튜브 채널이 없습니다.")
             for src in yt_sources:
                 c1, c2, c3 = st.columns([6, 2, 2])
                 with c1:
@@ -75,21 +138,21 @@ def render_tab_settings(is_live):
                         st.toast("채널이 삭제되었습니다.")
                         st.rerun()
                 st.markdown("---")
-
-        st.markdown("#### 💡 사용자 제안 수집 소스")
-        st.caption("시스템 사용자들이 제안하거나 AI가 자율적으로 발굴한 수집 소스 후보입니다. 승인 시 자동 추가됩니다.")
+ 
+        st.markdown("#### 💡 AI 추천 소스 제안")
+        st.caption(f"'{dom_name}' 도메인과 연동하여 AI가 자율적으로 발굴한 수집 소스 후보입니다. 승인 시 수집 소스에 추가됩니다.")
         
-        # AI 자율 탐색 트리거 버튼 추가
+        # AI 자율 탐색 트리거 버튼 추가 (도메인 전달)
         if st.button("🔍 AI에게 새로운 수집 소스 발굴 시키기", use_container_width=True):
             if is_live:
-                with st.spinner("AI가 인터넷을 탐색하며 로봇 관련 RSS 및 유튜브 채널을 발굴 중입니다... (약 1분 소요)"):
-                    discover_sources()
+                with st.spinner(f"AI가 인터넷을 탐색하며 '{dom_name}' 관련 RSS 및 유튜브 채널을 발굴 중입니다... (약 1분 소요)"):
+                    discover_sources(domain_key=selected_domain_key)
                 st.success("✅ AI 탐색 완료! 아래 목록에서 발굴된 소스를 확인하세요.")
                 st.rerun()
             else:
                 st.error("DB 연결이 필요합니다.")
-
-        recommendations = get_recommended_sources() if is_live else []
+ 
+        recommendations = get_recommended_sources(domain_key=selected_domain_key) if is_live else []
         pending_recs = [r for r in recommendations if r['status'] == 'pending']
         
         if not pending_recs:
@@ -117,9 +180,9 @@ def render_tab_settings(is_live):
                             update_recommended_source_status(rec['id'], "approved")
                             new_name = "".join(filter(str.isalnum, rec['label'].lower())).replace(" ", "_")
                             if rec['source_type'] in ['video', 'youtube']:
-                                add_youtube_source("youtube_" + new_name, rec['url'], rec['label'])
+                                add_youtube_source("youtube_" + new_name, rec['url'], rec['label'], domain_key=selected_domain_key)
                             else:
-                                add_news_source(new_name, rec['url'], rec['label'])
+                                add_news_source(new_name, rec['url'], rec['label'], domain_key=selected_domain_key)
                             st.toast(f"{rec['label']} 등록 완료!")
                         st.rerun()
                 with rc3:
@@ -127,7 +190,7 @@ def render_tab_settings(is_live):
                         update_recommended_source_status(rec['id'], "rejected")
                         st.rerun()
                 st.markdown("---")
-
+ 
     # --- 서브 탭 2: 시스템 제어 ---
     with sub_tab_system:
         st.markdown("#### AI 분석 스케줄링")
@@ -144,7 +207,7 @@ def render_tab_settings(is_live):
                 st.toast(f"✅ AI 분석 스케줄이 '매일 새벽 {new_hr:02d}:30'으로 변경되었습니다.")
             else:
                 st.toast("⚠️ 스케줄러가 활성화되지 않았습니다.", icon="⚠️")
-
+ 
         st.selectbox(
             "분석 시작 시간 (0~23시)", 
             options=list(range(24)), 
@@ -161,7 +224,7 @@ def render_tab_settings(is_live):
             new_limit = st.session_state.analysis_batch_limit_input
             set_system_setting("analysis_batch_limit", str(new_limit))
             st.toast(f"✅ AI 분석 배치 크기가 {new_limit}건으로 변경되었습니다.")
-
+ 
         st.number_input(
             "AI 분석 배치 크기 (한 번에 분석할 개수)",
             min_value=1, max_value=1000,
@@ -171,7 +234,7 @@ def render_tab_settings(is_live):
             on_change=on_batch_limit_change,
             help="수동/자동 분석 시 한 번에 처리할 기사의 최대 개수입니다."
         )
-
+ 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("#### 중복 기사 필터링 (Semantic Dedup)")
         
@@ -181,7 +244,7 @@ def render_tab_settings(is_live):
             val = st.session_state.semantic_dedup_toggle
             set_system_setting("semantic_dedup_enabled", str(val))
             st.toast(f"✅ 유사 기사 중복 필터링이 {'활성화' if val else '비활성화'}되었습니다.")
-
+ 
         st.toggle(
             "유사 기사 중복 필터링 사용",
             value=is_dedup_enabled,
@@ -189,14 +252,14 @@ def render_tab_settings(is_live):
             on_change=on_dedup_toggle,
             help="내용이 유사한 기사를 자동으로 걸러냅니다."
         )
-
+ 
         # 유사도 임계값 설정
         current_threshold = float(get_system_setting("semantic_dedup_threshold", "0.95"))
         def on_threshold_change():
             val = st.session_state.semantic_dedup_threshold_slider
             set_system_setting("semantic_dedup_threshold", f"{val:.2f}")
             st.toast(f"✅ 중복 판단 임계값이 {val:.2f}로 설정되었습니다.")
-
+ 
         st.slider(
             "중복 판단 유사도 임계값",
             min_value=0.70, max_value=0.99,
@@ -221,7 +284,7 @@ def render_tab_settings(is_live):
             def on_model_change():
                 st.session_state.lms_model = st.session_state.model_selector
                 st.toast(f"✅ 사용 모델이 '{st.session_state.lms_model}'로 변경되었습니다.")
-
+ 
             st.selectbox(
                 "로드된 모델 목록",
                 options=available_models,
@@ -233,7 +296,7 @@ def render_tab_settings(is_live):
             st.error("⚠️ 로드된 모델을 찾을 수 없습니다. LM Studio를 확인하세요.")
             if st.button("모델 목록 새로고침"):
                 st.rerun()
-
+ 
         st.markdown("<br><br>", unsafe_allow_html=True)
         st.markdown('<div style="background-color: #fff1f2; padding: 20px; border-radius: 10px; border: 1px solid #fda4af;">', unsafe_allow_html=True)
         st.markdown("<h4 style='color: #be123c; margin-top: 0;'>데이터 초기화</h4>", unsafe_allow_html=True)
