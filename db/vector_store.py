@@ -20,7 +20,7 @@ from sqlalchemy.orm import sessionmaker
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5432/robopulse")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5432/newsstream")
 LMS_BASE_URL = os.getenv("LMS_API_BASE", "http://localhost:1234/v1")
 
 _engine = None

@@ -1,5 +1,5 @@
 """
-app.py - RoboPulse 메인 Streamlit 대시보드
+app.py - NewsStream 메인 Streamlit 대시보드
 개선된 라이트 모드 테마 및 간결한 UI (No Emojis)
 """
 import logging
@@ -17,7 +17,7 @@ import streamlit as st
 
 # ---- 페이지 설정 (반드시 모든 st 명령 중 가장 먼저 실행되어야 함) ----
 st.set_page_config(
-    page_title="RoboPulse",
+    page_title="NewsStream",
     page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -269,7 +269,7 @@ if is_live:
 
 col_h1, col_h2 = st.columns([8, 2])
 with col_h1:
-    st.markdown('<h1 class="hero-title">RoboPulse</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="hero-title">NewsStream</h1>', unsafe_allow_html=True)
     st.markdown(f'<p class="hero-sub">{domain_name} 관련 데이터 수집 자동화 엔진 — Powered by Local Gemma 4</p>', unsafe_allow_html=True)
 with col_h2:
     st.markdown(f"<div style='text-align:right;color:#94a3b8;font-size:0.8rem;padding-top:14px'>{datetime.now().strftime('%m/%d %H:%M')}</div>", unsafe_allow_html=True)

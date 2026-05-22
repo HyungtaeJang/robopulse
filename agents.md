@@ -1,6 +1,6 @@
-# RoboPulse Project Development Environment
+# NewsStream Project Development Environment
 
-이 문서는 AI 에이전트(Antigravity)가 RoboPulse 프로젝트를 작업할 때 준수해야 할 환경 정보를 담고 있습니다.
+이 문서는 AI 에이전트(Antigravity)가 NewsStream 프로젝트를 작업할 때 준수해야 할 환경 정보를 담고 있습니다.
 
 ## 🖥️ 하드웨어 구성
 

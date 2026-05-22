@@ -1,5 +1,5 @@
 """
-RoboPulse 홈로봇 피벗 지원 스크립트
+NewsStream 홈로봇 피벗 지원 스크립트
 ---------------------------------
 사용법: python3 scratch/pivot_system.py --init
 (주의: --init 옵션 사용 시 기존 데이터가 모두 초기화됩니다.)

@@ -32,7 +32,7 @@ def _url_to_hash(url: str) -> str:
 def is_duplicate(url: str) -> bool:
     """해당 URL이 이미 수집된 적 있으면 True를 반환합니다."""
     r = _get_redis()
-    key = f"robopulse:seen:{_url_to_hash(url)}"
+    key = f"newsstream:seen:{_url_to_hash(url)}"
     return r.exists(key) == 1
 
 
@@ -41,7 +41,7 @@ def mark_seen(url: str, ttl_days: int | None = None) -> None:
     if ttl_days is None:
         ttl_days = int(os.getenv("DEDUP_TTL_DAYS", "90"))
     r = _get_redis()
-    key = f"robopulse:seen:{_url_to_hash(url)}"
+    key = f"newsstream:seen:{_url_to_hash(url)}"
     r.set(key, 1, ex=ttl_days * 86400)
 
 
