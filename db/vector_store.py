@@ -875,9 +875,69 @@ def delete_domain(key: str):
         session.close()
 
 
+def discover_rss_feed_static(url: str) -> Optional[str]:
+    """
+    등록 이관 시점에 한해 1회성으로 일반 HTML 내의 메타태그 및 피드 링크에서 표준 XML RSS 주소를 역추적하고 자동 변환합니다.
+    표준 RSS를 식별할 수 없을 경우 None을 반환하여 차단합니다.
+    """
+    if not url:
+        return None
+        
+    low_url = url.lower()
+    # 이미 명시적인 피드 주소 형식인 경우 즉시 그대로 사용
+    if low_url.endswith((".xml", ".rss", ".atom")) or "/feed" in low_url or ("rss" in low_url and "feed" in low_url):
+        return url
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+    }
+
+    try:
+        from bs4 import BeautifulSoup
+        from urllib.parse import urljoin
+        
+        with httpx.Client(headers=headers, proxy=None, trust_env=False, timeout=10.0, follow_redirects=True) as client:
+            resp = client.get(url)
+            if resp.status_code != 200:
+                return None
+            
+            # 이미 피드 XML 내용이라면 그대로 반환
+            content_type = resp.headers.get("content-type", "").lower()
+            if "xml" in content_type or "rss" in content_type or "atom" in content_type:
+                return url
+                
+            soup = BeautifulSoup(resp.text, "lxml")
+            
+            # 1. <link rel="alternate" ...> 메타태그 탐색
+            for link in soup.find_all("link", rel="alternate"):
+                ltype = link.get("type", "").lower()
+                if "rss+xml" in ltype or "atom+xml" in ltype or "xml" in ltype:
+                    href = link.get("href")
+                    if href:
+                        discovered_url = urljoin(url, href)
+                        logger.info(f"   💡 [RSS Auto-Discovery Static] 등록 시점 진짜 RSS 피드 발견: {discovered_url}")
+                        return discovered_url
+            
+            # 2. <a> 태그 중 href에 'rss' 또는 'feed'가 포함된 명시적 피드 링크 탐색
+            for a in soup.find_all("a", href=True):
+                href = a.get("href")
+                low_href = href.lower()
+                if "rss" in low_href or "feed" in low_href or low_href.endswith(".xml"):
+                    if "feedly.com" not in low_href and "feedburner.com" not in low_href:
+                        discovered_url = urljoin(url, href)
+                        logger.info(f"   💡 [RSS Auto-Discovery Static] a 태그에서 RSS 피드 발견: {discovered_url}")
+                        return discovered_url
+                        
+    except Exception as e:
+        logger.warning(f"등록 시점 RSS 피드 자동 발견 중 예외 발생 ({url}): {e}")
+
+    return None
+
+
 def inject_recommended_sources(domain_key: str, selected_urls: list[str]) -> tuple[int, int]:
     """
     추천 소스 중 사용자가 선택한 URL들을 실제 수집 소스 테이블로 일괄 이관합니다.
+    이관 시 'news' 소스에 한해 진짜 RSS XML 피드 주소로 1회 정제하여 DB에 안전하게 적재합니다.
     Returns: (news_added, youtube_added)
     """
     if not selected_urls:
@@ -906,14 +966,26 @@ def inject_recommended_sources(domain_key: str, selected_urls: list[str]) -> tup
                 name_clean = "discovered_source_" + str(uuid.uuid4())[:8]
                 
             if source_type == 'news':
-                # news_sources에 존재 여부 체크
+                # 1회성 진짜 RSS 피드 URL 역추적 변환 및 검증
+                rss_url = discover_rss_feed_static(url)
+                if not rss_url:
+                    logger.warning(f"⚠️ [RSS 검증 실패] '{label}' 소스에서 유효한 RSS 피드를 역추적할 수 없어 등록을 차단합니다: {url}")
+                    # 승인 대기 목록에서 제외하며 거절(rejected) 상태로 이관 실패 기록
+                    session.execute(text("""
+                        UPDATE recommended_sources 
+                        SET status = 'rejected', reason = CONCAT(reason, ' (이관 실패: RSS XML 피드 전무)')
+                        WHERE domain_key = :domain_key AND url = :url
+                    """), {"domain_key": domain_key, "url": url})
+                    continue
+                
+                # news_sources에 존재 여부 체크 (변환된 rss_url 기준)
                 dup = session.execute(text("SELECT id FROM news_sources WHERE domain_key = :dk AND (url = :url OR name = :name)"), 
-                                      {"dk": domain_key, "url": url, "name": name_clean}).fetchone()
+                                      {"dk": domain_key, "url": rss_url, "name": name_clean}).fetchone()
                 if not dup:
                     session.execute(text("""
                         INSERT INTO news_sources (domain_key, name, url, label, is_active)
                         VALUES (:domain_key, :name, :url, :label, TRUE)
-                    """), {"domain_key": domain_key, "name": name_clean, "url": url, "label": label})
+                    """), {"domain_key": domain_key, "name": name_clean, "url": rss_url, "label": label})
                     news_added += 1
             else:
                 # youtube_sources에 존재 여부 체크
