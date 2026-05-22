@@ -6,9 +6,14 @@ ingestion/news_scraper.py
 """
 import os
 import logging
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
+
+# Python 3.13 호환성: feedparser 내부의 re.sub 등 count 위치 인자 DeprecationWarning 경고 차단
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="feedparser.*")
+warnings.filterwarnings("ignore", message=".*'count' is passed as positional argument.*")
 
 import feedparser
 import httpx
