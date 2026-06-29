@@ -549,11 +549,16 @@ def check_all_connections() -> dict:
 
 
 def get_available_lms_models() -> list[str]:
-    """LM Studio에서 현재 로드되어 사용 가능한 모델 목록을 가져옵니다."""
+    """LM Studio에서 현재 로드되어 사용 가능한 분석/대화용 LLM 모델 목록을 가져옵니다 (임베딩 모델 제외)."""
     try:
         client = get_lms_client()
         models = client.models.list()
-        return [m.id for m in models.data]
+        # 임베딩 모델(embed, embedding 키워드 포함) 제외
+        valid_models = [
+            m.id for m in models.data 
+            if "embed" not in m.id.lower() and "bge" not in m.id.lower()
+        ]
+        return valid_models
     except Exception as e:
         logger.warning(f"LM Studio 모델 목록 가저오기 실패: {e}")
         return []
