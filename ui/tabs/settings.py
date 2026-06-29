@@ -298,6 +298,10 @@ def render_tab_settings(is_live):
             
             def on_model_change():
                 st.session_state.lms_model = st.session_state.model_selector
+                try:
+                    set_system_setting("active_lms_model", st.session_state.model_selector)
+                except Exception:
+                    pass
                 st.toast(f"✅ 사용 모델이 '{st.session_state.lms_model}'로 변경되었습니다.")
  
             st.selectbox(

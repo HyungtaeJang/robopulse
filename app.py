@@ -101,7 +101,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ---- LM Studio 모델 설정 (서버 로드 모델 우선 감지) -----------
-@st.cache_data(ttl=600)  # 10분 동안 모델 목록 캐싱하여 네트워크 부하 감소
 def sync_lms_model(conn_status):
     # 실제 서버에서 로드된 모델 목록 가져오기
     available_models = []
