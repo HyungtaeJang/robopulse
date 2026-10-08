@@ -491,22 +491,17 @@ def check_all_connections() -> dict:
 
     # 2. Redis
     try:
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-        r = redis.from_url(redis_url, socket_connect_timeout=1)
-        if r.ping():
+        # 매 호출마다 새 클라이언트를 만들면 소켓이 누적되므로 싱글턴 재사용
+        from engine.deduplicator import _get_redis
+        if _get_redis().ping():
             results["redis"] = True
     except Exception:
         pass
 
-    # 3. LM Studio
+    # 3. LM Studio (기존 싱글턴 클라이언트 재사용, 3초 타임아웃)
     try:
-        import httpx
-        lms_api_base = os.getenv("LMS_API_BASE", "http://localhost:1234/v1")
-        # 가벼운 HTTP GET 요청으로 모델 목록 엔드포인트 확인 (3초 타임아웃)
-        with httpx.Client(timeout=3.0) as client:
-            resp = client.get(f"{lms_api_base}/models")
-            if resp.status_code == 200:
-                results["lms"] = True
+        get_lms_client().with_options(timeout=3.0, max_retries=0).models.list()
+        results["lms"] = True
     except Exception:
         pass
 
@@ -701,8 +696,8 @@ def clear_all_data(reset_sources=False):
         # Redis 중복 방지 캐시도 비우기
         if redis.Redis:
             try:
-                r = redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"))
-                r.flushdb()
+                from engine.deduplicator import _get_redis
+                _get_redis().flushdb()
                 logger.info("Redis 듀플리케이터 초기화 완료")
             except Exception:
                 pass

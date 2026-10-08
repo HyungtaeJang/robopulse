@@ -40,6 +40,7 @@ def _run_background_analysis():
         logger.info("🤖 [실시간 AI 분석] 이미 분석 스레드가 실행 중입니다. 대기열(Dirty Flag) 예약을 활성화하고 종료합니다.")
         return
 
+    mgr = None
     try:
         # 2. Streamlit의 ANALYSIS_MANAGER 연동 (Streamlit 프로세스 안에서 동작할 때만)
         main_mod = sys.modules.get("__main__")
@@ -55,9 +56,10 @@ def _run_background_analysis():
                         return
                     mgr["current"] = current
                     mgr["total"] = total
-                    if current >= total and total > 0:
+                    # total == 0(분석할 기사 없음)도 종료로 처리해야 active가 갇히지 않음
+                    if total == 0 or current >= total:
                         mgr["active"] = False
-                        mgr["done"] = True
+                        mgr["done"] = total > 0
 
         # 연속 쿼리 연장 루프 (더티 플래그 체크)
         while True:
@@ -87,6 +89,10 @@ def _run_background_analysis():
             with mgr["lock"]:
                 mgr["active"] = False
     finally:
+        # 어떤 경로로 끝나든 UI 자동 갱신 루프가 남지 않도록 플래그 해제
+        if mgr:
+            with mgr["lock"]:
+                mgr["active"] = False
         _analysis_lock.release()
         logger.info("🤖 [실시간 AI 분석] 백그라운드 분석 스레드가 안전하게 종료되었습니다.")
 

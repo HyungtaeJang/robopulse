@@ -49,10 +49,11 @@ def analysis_callback(current, total):
         
         mgr["current"] = current
         mgr["total"] = total
-        
-        if current >= total and total > 0:
+
+        # total == 0(분석할 기사 없음)도 종료로 처리해야 active가 갇히지 않음
+        if total == 0 or current >= total:
             mgr["active"] = False
-            mgr["done"] = True
+            mgr["done"] = total > 0
 
 def run_analysis_in_background():
     """AI 분석을 백그라운드 스레드에서 시작 (전역 상태 사용)"""
@@ -136,7 +137,11 @@ def auto_start_scheduler(is_live):
     return True
 
 # ---- 데이터 로드 및 초기화 ------------------------------------
-conn_status = check_all_connections()
+@st.cache_data(ttl=30)  # 재실행(3초 와처 포함)마다 연결을 새로 만들지 않도록 30초 캐싱
+def cached_connections():
+    return check_all_connections()
+
+conn_status = cached_connections()
 is_live = conn_status["postgres"]
 LMS_MODEL_NAME = sync_lms_model(conn_status)
 
