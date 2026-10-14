@@ -1,37 +1,27 @@
 # NewsStream Project Development Environment
 
-이 문서는 AI 에이전트(Antigravity)가 NewsStream 프로젝트를 작업할 때 준수해야 할 환경 정보를 담고 있습니다.
+이 문서는 AI 에이전트가 NewsStream(robopulse) 프로젝트를 작업할 때 준수해야 할 환경 정보를 담고 있습니다.
 
-## 🖥️ 하드웨어 구성
+## 🖥️ 실행 환경 (개발/운영 통합)
 
-### 1. 개발용 맥북 (Workplace)
-- **용도**: 코드 작성 및 수정 전용.
-- **경로**: `/Users/hyungtaejang/MySW/robopulse`
-- **특징**: 
-  - 코딩만 수행하며, 실제 DB나 Redis 등 백엔드 서비스는 실행되지 않음.
-  - 가상 환경(`venv`)이나 의존성 패키지가 완벽하지 않을 수 있음.
-  - **주의**: 이 환경에서 직접 DB 패치 명령(`psql`, `python3 patch.py` 등)을 실행하면 실패함.
-
-### 2. 실행용 맥스튜디오 (Target Server)
-- **용도**: 실제 서비스 가동 및 데이터 처리.
-- **경로**: `/Users/hyungtaejang/Git/robopulse`
-- **배포 방식**: 맥북에서 코드를 수정 후 Push하면, 사용자가 맥스튜디오에서 `git pull`하여 실행함.
-- **인프라**:
-  - **Database**: PostgreSQL (pgvector 설치됨)
-  - **Cache**: Redis
-  - **LLM**: LM Studio (Gemma 4 26B 가동 중)
-  - **Python**: 가상 환경(`venv`) 구축됨.
+- **위치**: 맥스튜디오 `/Users/hyungtaejang/Git/robopulse`
+- 코드 작성과 실제 서비스 가동을 모두 이 맥스튜디오에서 수행합니다. (과거의 "맥북에서 코드 수정 → push → 맥스튜디오에서 pull" 2단 구조는 더 이상 사용하지 않음)
+- **인프라** (모두 이 머신에서 가동 중, 상세는 `~/Git/INFRA.md` 참고):
+  - **Database**: PostgreSQL 16 (Homebrew 서비스, pgvector 설치됨), DB명 `newsstream`
+  - **Cache**: Redis (Homebrew 서비스), DB index `0`
+  - **LLM**: LM Studio (Gemma 4 26B), `http://localhost:1234/v1`
+  - **Python**: 프로젝트 내 `venv/`
+  - **대시보드**: PM2로 가동 중 (`pm2 restart robopulse`, 로그 `pm2 logs robopulse`), 포트 `8502` (`.streamlit/config.toml`). 실행 정의는 `~/Git/ecosystem.config.js`
 
 ## 🚀 에이전트 지침
 
-1. **DB 스키마 변경 시**: 
-   - 맥북 터미널에서 `psql`이나 스크립트를 직접 실행하지 마십시오.
-   - 대신, 서비스 코드(예: `db/vector_store.py`)가 실행될 때 자동으로 스키마를 체크하고 컬럼을 생성하는 **Self-Healing(Migrating)** 로직을 작성하십시오.
-   - 또는 사용자가 맥스튜디오 터미널에서 실행할 수 있는 별도의 마이그레이션 스크립트를 제공하고 안내하십시오.
+1. **DB 스키마/데이터 변경 시**:
+   - 스키마 변경은 서비스 코드(예: `db/vector_store.py`)의 Self-Healing(기동 시 누락 테이블/컬럼 자동 생성) 로직으로 처리하는 것을 기본으로 합니다.
+   - 데이터 자체의 수정·보정이 필요하면 `psql` 등으로 직접 수정해도 됩니다.
 
 2. **의존성 추가 시**:
-   - `requirements.txt`에 기록하고, 사용자가 맥스튜디오에서 업데이트할 수 있도록 안내하십시오.
+   - `requirements.txt`에 기록하고 `venv/`에 직접 설치합니다.
 
 3. **테스트 및 검증**:
-   - 맥북 환경에서의 실행 실패는 무시하되, 코드 로직의 정합성을 최우선으로 검토하십시오.
-   - 실제 동작 여부는 사용자가 맥스튜디오에서 확인해야 함을 명시하십시오.
+   - DB/Redis/LM Studio에 실제로 연결되는 환경이므로, 실행 오류는 무시하지 말고 원인을 확인합니다.
+   - 대시보드는 운영 중인 서비스이므로 재시작이 필요하면 사용자에게 먼저 알립니다.
